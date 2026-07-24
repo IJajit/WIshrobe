@@ -127,7 +127,7 @@ export default function App() {
       if (activeTab === "items") {
         const storageKey = `wishrobe_items_${activeProfile.id}`;
 
-        // 1. Check server first if local items are empty, or merge server items
+        // 1. Check server first to sync cross-device wardrobe items
         try {
           const res = await fetch(`/api/items?profileId=${activeProfile.id}`, {
             headers: { "X-User-Uid": user.uid },
@@ -136,12 +136,17 @@ export default function App() {
             const serverList: ClothingItem[] = await res.json();
             const latestLocalRaw = localStorage.getItem(storageKey);
             const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
-            const localIds = new Set(latestLocal.map((i) => i.id));
-            const serverOnly = serverList.filter((i) => !localIds.has(i.id));
 
-            const merged = [...latestLocal, ...serverOnly];
-            localStorage.setItem(storageKey, JSON.stringify(merged));
-            const mergedRestored = merged.map((item) => {
+            // If server returns items, or if local is empty, sync server items to local storage
+            let finalItems = serverList;
+            if (latestLocal.length > 0) {
+              const localIds = new Set(latestLocal.map((i) => i.id));
+              const serverOnly = serverList.filter((i) => !localIds.has(i.id));
+              finalItems = [...latestLocal, ...serverOnly];
+            }
+
+            localStorage.setItem(storageKey, JSON.stringify(finalItems));
+            const mergedRestored = finalItems.map((item) => {
               const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
               const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
               return {
