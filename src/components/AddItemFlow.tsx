@@ -322,9 +322,9 @@ export default function AddItemFlow({
                     fileInputRef.current.click();
                   }
                 }}
-                className="w-full py-3.5 bg-slate-100 border border-slate-200 text-gray-700 hover:bg-slate-200 font-medium rounded-2xl text-xs transition flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-black text-white hover:bg-zinc-800 font-medium rounded-2xl text-xs shadow-md transition flex items-center justify-center gap-2"
               >
-                <ImageIcon className="w-4 h-4 text-gray-500" />
+                <ImageIcon className="w-4 h-4 text-white" />
                 Upload
               </button>
 
