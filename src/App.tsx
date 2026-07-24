@@ -306,15 +306,23 @@ export default function App() {
         }
       } catch {}
 
-      // Sync to server in background
+      // Sync to Supabase directly
       try {
-        await fetch(`/api/items/${item.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", "X-User-Uid": user.uid },
-          body: JSON.stringify(updates),
-        });
+        const dbUpdates: any = {};
+        if (updates.category !== undefined) dbUpdates.category = updates.category;
+        if (updates.subcategory !== undefined) dbUpdates.subcategory = updates.subcategory;
+        if (updates.colors !== undefined) dbUpdates.colors = updates.colors;
+        if (updates.season !== undefined) dbUpdates.season = updates.season;
+        if (updates.occasion !== undefined) dbUpdates.occasion = updates.occasion;
+        if (updates.customZoom !== undefined) dbUpdates.custom_zoom = updates.customZoom;
+        if (updates.customOffsetY !== undefined) dbUpdates.custom_offset_y = updates.customOffsetY;
+        if (updates.imageUrl !== undefined) dbUpdates.image_url = updates.imageUrl;
+
+        if (Object.keys(dbUpdates).length > 0) {
+          await supabase.from("items").update(dbUpdates).eq("id", item.id);
+        }
       } catch {
-        // Server unavailable — localStorage update is sufficient
+        // Supabase unavailable — localStorage update is sufficient
       }
     } catch (err) {
       console.error("Error updating item:", err);
