@@ -230,7 +230,7 @@ app.post("/api/profiles", async (req, res) => {
 
     const profileId = id || `p-${Date.now()}`;
     const client = getSupabaseClient();
-    const { error } = await client.from("profiles").insert({
+    const { error } = await client.from("profiles").upsert({
       id: profileId,
       user_id: userId,
       name,
@@ -372,7 +372,7 @@ app.post("/api/items", async (req, res) => {
     };
 
     const client = getSupabaseClient();
-    const { error } = await client.from("items").insert(itemInsert);
+    const { error } = await client.from("items").upsert(itemInsert);
     if (error) throw error;
 
     res.json({
