@@ -407,6 +407,7 @@ export default function OutfitBuilder({
           occasion: outfitData.occasion,
           created_at: outfitData.createdAt,
           item_scales: outfitData.itemScales,
+          times_worn: initialOutfit?.timesWorn || 0,
         });
         if (dbError) {
           console.error("Supabase outfit save error:", dbError);
