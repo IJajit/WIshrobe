@@ -303,7 +303,10 @@ export default function ImageProcessor({
     if (!ctx) return;
 
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    // Only set crossOrigin if src is an HTTP/HTTPS remote URL
+    if (src.startsWith("http://") || src.startsWith("https://")) {
+      img.crossOrigin = "anonymous";
+    }
     img.onload = () => {
       if (img.width > 0 && img.height > 0) {
         canvas.width = img.width;
@@ -503,26 +506,13 @@ export default function ImageProcessor({
 
         {/* Canvas container: Scale zoom strictly when editing, centered normal view otherwise */}
         <div
-          className="w-full h-full flex items-center justify-center p-3 transition-transform duration-150 ease-out relative"
+          className="w-full h-full flex items-center justify-center p-3 transition-transform duration-150 ease-out"
           style={{
             transform: isErasing
               ? `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`
               : "none",
           }}
         >
-          {/* Always display preview <img> as underlying visual source */}
-          {cutoutUrl && (
-            <img
-              src={cutoutUrl}
-              alt="Item cutout"
-              className={`max-w-full max-h-full object-contain pointer-events-none transition-opacity duration-150 ${
-                enableStudioFilter
-                  ? "contrast-[1.08] saturate-[1.06] brightness-[1.02] drop-shadow-[0_12px_24px_rgba(0,0,0,0.14)]"
-                  : "drop-shadow-md"
-              }`}
-            />
-          )}
-
           <canvas
             ref={canvasRef}
             onMouseDown={(e) => {
@@ -553,14 +543,16 @@ export default function ImageProcessor({
               if (isPanning) handlePanEnd();
               else stopErasing();
             }}
-            className={`w-full h-full absolute inset-0 object-contain z-10 bg-transparent ${
-              isErasing ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-            } ${
+            className={`max-w-full max-h-full object-contain z-10 transition-all duration-300 ${
               isErasing && activeTool === "pan"
                 ? isPanning ? "cursor-grabbing" : "cursor-grab"
                 : isErasing
                 ? "cursor-crosshair"
                 : ""
+            } ${
+              enableStudioFilter
+                ? "contrast-[1.08] saturate-[1.06] brightness-[1.02] drop-shadow-[0_12px_24px_rgba(0,0,0,0.14)]"
+                : "drop-shadow-md"
             }`}
           />
         </div>
