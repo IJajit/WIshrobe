@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, Sparkles, Check, Grid, Layers, Trash2, RefreshCw, Star, Info } from "lucide-react";
 import { Profile, ClothingItem, Outfit } from "../types";
+import { supabase } from "../supabase";
 
 interface OutfitBuilderProps {
   userId: string;
@@ -412,15 +413,21 @@ export default function OutfitBuilder({
       onClose();
       setIsSaving(false);
 
-      // 2. Sync to server in background
-      fetch(initialOutfit ? `/api/outfits/${initialOutfit.id}` : "/api/outfits", {
-        method: initialOutfit ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Uid": userId,
-        },
-        body: JSON.stringify(outfitData),
-      }).catch(() => {});
+      // 2. Sync to Supabase directly
+      try {
+        await supabase.from("outfits").upsert({
+          id: outfitData.id,
+          user_id: userId,
+          profile_id: profile.id,
+          name: outfitData.name,
+          item_ids: outfitData.itemIds,
+          occasion: outfitData.occasion,
+          created_at: outfitData.createdAt,
+          item_scales: outfitData.itemScales,
+        });
+      } catch (e) {
+        console.warn("Supabase outfit sync warning:", e);
+      }
 
     } catch (err: any) {
       console.error("Save outfit error:", err);

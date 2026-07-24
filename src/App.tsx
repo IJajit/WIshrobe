@@ -239,26 +239,41 @@ export default function App() {
         setItems(restored);
         setIsLoading(false);
       } else {
-        // Outfits — try server first to sync cross-device, or fall back to local
+        // Outfits — query Supabase directly for cross-device sync
         try {
-          const res = await fetch(`/api/outfits?profileId=${activeProfile.id}`, {
-            headers: { "X-User-Uid": user.uid },
-          });
-          if (res.ok) {
-            const list: Outfit[] = await res.json();
+          const { data: dbOutfits, error } = await supabase
+            .from("outfits")
+            .select("*")
+            .eq("profile_id", activeProfile.id)
+            .order("created_at", { ascending: false });
+
+          if (!error && dbOutfits) {
+            const mappedOutfits: Outfit[] = dbOutfits.map((o: any) => ({
+              id: o.id,
+              userId: o.user_id,
+              profileId: o.profile_id,
+              name: o.name,
+              itemIds: o.item_ids || [],
+              itemScales: o.item_scales || {},
+              occasion: o.occasion,
+              createdAt: o.created_at,
+              timesWorn: o.times_worn || 0,
+              lastWornAt: o.last_worn_at,
+            }));
+
             const storedOutfitsRaw = localStorage.getItem(`local_outfits_${activeProfile.id}`);
             const localOutfits: Outfit[] = storedOutfitsRaw ? JSON.parse(storedOutfitsRaw) : [];
-            const localOutfitIds = new Set(localOutfits.map((o) => o.id));
-            const serverOnly = list.filter((o) => !localOutfitIds.has(o.id));
-            const mergedOutfits = [...localOutfits, ...serverOnly];
+            const serverIds = new Set(mappedOutfits.map((o) => o.id));
+            const localOnly = localOutfits.filter((o) => !serverIds.has(o.id));
+            const mergedOutfits = [...mappedOutfits, ...localOnly];
 
             setOutfits(mergedOutfits);
             localStorage.setItem(`local_outfits_${activeProfile.id}`, JSON.stringify(mergedOutfits));
             setIsLoading(false);
             return;
           }
-        } catch {
-          // Server offline fallback
+        } catch (e) {
+          console.warn("Supabase outfits fetch error:", e);
         }
 
         const storedOutfits = localStorage.getItem(`local_outfits_${activeProfile.id}`);
@@ -466,12 +481,18 @@ export default function App() {
       setOutfits((prev) => prev.filter((o) => o.id !== outfitId));
       setSelectedOutfitDetail(null);
 
-      await fetch(`/api/outfits/${outfitId}`, {
-        method: "DELETE",
-        headers: {
-          "X-User-Uid": user.uid,
-        },
-      });
+      // Update localStorage
+      if (activeProfile) {
+        const storageKey = `local_outfits_${activeProfile.id}`;
+        const storedOutfitsRaw = localStorage.getItem(storageKey);
+        if (storedOutfitsRaw) {
+          const list: Outfit[] = JSON.parse(storedOutfitsRaw);
+          localStorage.setItem(storageKey, JSON.stringify(list.filter((o) => o.id !== outfitId)));
+        }
+      }
+
+      // Delete from Supabase directly
+      await supabase.from("outfits").delete().eq("id", outfitId);
     } catch (err) {
       console.error("Error deleting outfit:", err);
     }
