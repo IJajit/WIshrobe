@@ -433,42 +433,6 @@ export default function AddItemFlow({
               />
             </div>
 
-            {/* Colors Tags */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-normal text-gray-500 capitalize block mb-1">
-                Color
-              </label>
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {colors.map((color) => (
-                  <span
-                    key={color}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-gray-700 text-[10px] font-normal rounded-full transition cursor-pointer"
-                    onClick={() => removeColor(color)}
-                  >
-                    {color}
-                    <X className="w-3 h-3 text-gray-400" />
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Add color"
-                  value={newColor}
-                  onChange={(e) => setNewColor(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addColor())}
-                  className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs font-normal focus:outline-none focus:ring-1 focus:ring-black"
-                />
-                <button
-                  type="button"
-                  onClick={addColor}
-                  className="px-4 bg-slate-100 hover:bg-slate-200 text-gray-700 font-normal rounded-xl text-xs"
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-
             {/* Seasons Suitability */}
             <div className="space-y-2">
               <label className="text-[11px] font-normal text-gray-500 capitalize block mb-1">
