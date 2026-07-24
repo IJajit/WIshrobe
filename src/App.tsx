@@ -159,31 +159,64 @@ export default function App() {
             setItems(mergedRestored);
             setIsLoading(false);
 
-            // Fetch image_url in background for items missing it (added from another device)
+            // Sequentially fetch + compress images for items added from other devices
             const missingImages = dbMapped.filter((i) => !i.imageUrl);
             if (missingImages.length > 0) {
-              Promise.all(
-                missingImages.map((item) =>
-                  supabase
-                    .from("items")
-                    .select("id, image_url")
-                    .eq("id", item.id)
-                    .single()
-                )
-              ).then((results) => {
-                setItems((prev) => {
-                  const updated = prev.map((item) => {
-                    if (!item.imageUrl) {
-                      const match = results.find((r) => r.data?.id === item.id);
-                      if (match?.data?.image_url) return { ...item, imageUrl: match.data.image_url };
-                    }
-                    return item;
-                  });
-                  // Save updated images to localStorage
-                  localStorage.setItem(storageKey, JSON.stringify(updated));
-                  return updated;
+              // Helper: compress a dataUrl to WebP <300KB
+              const recompress = (dataUrl: string): Promise<string> =>
+                new Promise((resolve) => {
+                  const img = new window.Image();
+                  img.onload = () => {
+                    const MAX = 350;
+                    const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                    const w = Math.round(img.width * scale);
+                    const h = Math.round(img.height * scale);
+                    const c = document.createElement("canvas");
+                    c.width = w; c.height = h;
+                    const ctx = c.getContext("2d")!;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const webp = c.toDataURL("image/webp", 0.75);
+                    if (webp.startsWith("data:image/webp")) { resolve(webp); return; }
+                    // Fallback: JPEG on white bg
+                    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+                    resolve(c.toDataURL("image/jpeg", 0.8));
+                  };
+                  img.onerror = () => resolve(dataUrl);
+                  img.src = dataUrl;
                 });
-              }).catch(() => {});
+
+              // Sequential fetch to respect Supabase 6MB row limit
+              (async () => {
+                for (const item of missingImages) {
+                  try {
+                    const { data } = await supabase
+                      .from("items")
+                      .select("id, image_url")
+                      .eq("id", item.id)
+                      .single();
+                    if (!data?.image_url) continue;
+
+                    // Compress to small size
+                    const compressed = await recompress(data.image_url);
+
+                    // Re-save compressed version to Supabase so future cross-device loads are fast
+                    if (compressed !== data.image_url) {
+                      supabase.from("items").update({ image_url: compressed }).eq("id", item.id).then(() => {});
+                    }
+
+                    // Update state and localStorage immediately as each image loads
+                    setItems((prev) => {
+                      const updated = prev.map((p) =>
+                        p.id === item.id ? { ...p, imageUrl: compressed } : p
+                      );
+                      localStorage.setItem(storageKey, JSON.stringify(updated));
+                      return updated;
+                    });
+                  } catch {
+                    // Skip this item if fetch fails
+                  }
+                }
+              })();
             }
 
             return;

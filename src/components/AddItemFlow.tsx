@@ -171,8 +171,8 @@ export default function AddItemFlow({
     }
   };
 
-  // Compress image to max 600px PNG — preserves transparent cutouts
-  const compressImage = (dataUrl: string, maxPx = 600): Promise<string> => {
+  // Compress image to max 400px WebP — small enough for cross-device Supabase sync
+  const compressImage = (dataUrl: string, maxPx = 400): Promise<string> => {
     return new Promise((resolve) => {
       const img = new window.Image();
       img.onload = () => {
@@ -185,7 +185,21 @@ export default function AddItemFlow({
         const ctx = canvas.getContext("2d");
         if (!ctx) { resolve(dataUrl); return; }
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/png"));
+        // Use WebP for best compression with transparency support
+        const webp = canvas.toDataURL("image/webp", 0.75);
+        if (webp.startsWith("data:image/webp")) {
+          resolve(webp);
+        } else {
+          // Fallback: JPEG on white background (no transparency)
+          const canvas2 = document.createElement("canvas");
+          canvas2.width = w;
+          canvas2.height = h;
+          const ctx2 = canvas2.getContext("2d")!;
+          ctx2.fillStyle = "#ffffff";
+          ctx2.fillRect(0, 0, w, h);
+          ctx2.drawImage(img, 0, 0, w, h);
+          resolve(canvas2.toDataURL("image/jpeg", 0.8));
+        }
       };
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;
