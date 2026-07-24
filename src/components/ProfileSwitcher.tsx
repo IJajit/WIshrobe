@@ -61,48 +61,58 @@ export default function ProfileSwitcher({
     const loadProfiles = async () => {
       setIsLoading(true);
       try {
-        // 1. Load from localStorage first — always the source of truth
-        let localList = loadLocalProfiles();
-
-        // 2. Seed defaults if nothing stored yet
-        if (localList.length === 0) {
-          const default1: Profile = { id: `p-${Date.now()}-1`, name: "Sarah", avatarColor: "bg-purple-500", createdAt: new Date().toISOString() };
-          const default2: Profile = { id: `p-${Date.now()}-2`, name: "Alex", avatarColor: "bg-teal-500", createdAt: new Date().toISOString() };
-          localList = [default1, default2];
-          saveLocalProfiles(localList);
-        }
-
-        setProfiles(localList);
-
-        // Restore last active profile
-        const savedId = localStorage.getItem(ACTIVE_KEY);
-        const matched = localList.find((p) => p.id === savedId);
-        saveActiveProfile(matched || localList[0]);
-
-        // 3. Optional background server sync — local ALWAYS wins
-        //    Server can only add profiles not already in local storage.
-        //    It can NEVER remove or overwrite local profiles.
+        // 1. Try server sync first to sync profiles across devices for logged-in users
         try {
           const res = await fetch("/api/profiles", { headers: { "X-User-Uid": userId } });
           if (res.ok) {
             const serverList: Profile[] = await res.json();
             if (serverList.length > 0) {
-              // Re-read local at this point (user may have changed it while fetch was in flight)
               const latestLocal = loadLocalProfiles();
               const localIds = new Set(latestLocal.map((p) => p.id));
-              // Only ADD server profiles that don't exist locally — never replace
               const serverOnly = serverList.filter((p) => !localIds.has(p.id));
-              if (serverOnly.length > 0) {
-                const merged = [...latestLocal, ...serverOnly];
-                setProfiles(merged);
-                saveLocalProfiles(merged);
-              }
-              // If server has fewer profiles than local, ignore server — local is newer
+              const merged = [...latestLocal, ...serverOnly];
+              setProfiles(merged);
+              saveLocalProfiles(merged);
+
+              const savedId = localStorage.getItem(ACTIVE_KEY);
+              const matched = merged.find((p) => p.id === savedId);
+              saveActiveProfile(matched || merged[0]);
+              setIsLoading(false);
+              return;
             }
           }
         } catch {
-          // Server unavailable — local data is the truth, no action needed
+          // Server offline or network error fallback
         }
+
+        // 2. Load from localStorage if server returned empty or failed
+        let localList = loadLocalProfiles();
+
+        // 3. Seed defaults only if no server profile & no local profile exists
+        if (localList.length === 0) {
+          const default1: Profile = { id: `p-${Date.now()}-1`, name: "Sarah", avatarColor: "bg-purple-500", createdAt: new Date().toISOString() };
+          const default2: Profile = { id: `p-${Date.now()}-2`, name: "Alex", avatarColor: "bg-teal-500", createdAt: new Date().toISOString() };
+          localList = [default1, default2];
+          saveLocalProfiles(localList);
+
+          // Post defaults to server for new users
+          fetch("/api/profiles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-User-Uid": userId },
+            body: JSON.stringify(default1),
+          }).catch(() => {});
+          fetch("/api/profiles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-User-Uid": userId },
+            body: JSON.stringify(default2),
+          }).catch(() => {});
+        }
+
+        setProfiles(localList);
+
+        const savedId = localStorage.getItem(ACTIVE_KEY);
+        const matched = localList.find((p) => p.id === savedId);
+        saveActiveProfile(matched || localList[0]);
       } catch (err) {
         console.error("Error loading profiles:", err);
       } finally {

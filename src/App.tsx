@@ -127,11 +127,39 @@ export default function App() {
       if (activeTab === "items") {
         const storageKey = `wishrobe_items_${activeProfile.id}`;
 
-        // 1. Load from localStorage immediately — always works
+        // 1. Check server first if local items are empty, or merge server items
+        try {
+          const res = await fetch(`/api/items?profileId=${activeProfile.id}`, {
+            headers: { "X-User-Uid": user.uid },
+          });
+          if (res.ok) {
+            const serverList: ClothingItem[] = await res.json();
+            const latestLocalRaw = localStorage.getItem(storageKey);
+            const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
+            const localIds = new Set(latestLocal.map((i) => i.id));
+            const serverOnly = serverList.filter((i) => !localIds.has(i.id));
+
+            const merged = [...latestLocal, ...serverOnly];
+            localStorage.setItem(storageKey, JSON.stringify(merged));
+            const mergedRestored = merged.map((item) => {
+              const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
+              const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
+              return {
+                ...item,
+                customZoom: savedZoom !== null ? parseFloat(savedZoom) : (item.customZoom || 1.0),
+                customOffsetY: savedOffsetY !== null ? parseInt(savedOffsetY) : (item.customOffsetY || 0),
+              };
+            });
+            setItems(mergedRestored);
+            setIsLoading(false);
+            return;
+          }
+        } catch {
+          // Server offline fallback
+        }
+
         const localRaw = localStorage.getItem(storageKey);
         const localList: ClothingItem[] = localRaw ? JSON.parse(localRaw) : [];
-
-        // Restore zoom/offset overrides
         const restored = localList.map((item) => {
           const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
           const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
@@ -143,54 +171,32 @@ export default function App() {
         });
         setItems(restored);
         setIsLoading(false);
-
-        // 2. Try server in background — merge additively, never overwrite local
-        try {
-          const res = await fetch(`/api/items?profileId=${activeProfile.id}`, {
-            headers: { "X-User-Uid": user.uid },
-          });
-          if (res.ok) {
-            const serverList: ClothingItem[] = await res.json();
-            const latestLocalRaw = localStorage.getItem(storageKey);
-            const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
-            const localIds = new Set(latestLocal.map((i) => i.id));
-            const serverOnly = serverList.filter((i) => !localIds.has(i.id));
-            if (serverOnly.length > 0) {
-              const merged = [...latestLocal, ...serverOnly];
-              localStorage.setItem(storageKey, JSON.stringify(merged));
-              const mergedRestored = merged.map((item) => {
-                const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
-                const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
-                return {
-                  ...item,
-                  customZoom: savedZoom !== null ? parseFloat(savedZoom) : (item.customZoom || 1.0),
-                  customOffsetY: savedOffsetY !== null ? parseInt(savedOffsetY) : (item.customOffsetY || 0),
-                };
-              });
-              setItems(mergedRestored);
-            }
-          }
-        } catch {
-          // Server unavailable — local items are shown, nothing to do
-        }
       } else {
-        // Outfits — load from localStorage first, then try server
-        const storedOutfits = localStorage.getItem(`local_outfits_${activeProfile.id}`);
-        if (storedOutfits) setOutfits(JSON.parse(storedOutfits));
-        setIsLoading(false);
-
+        // Outfits — try server first to sync cross-device, or fall back to local
         try {
           const res = await fetch(`/api/outfits?profileId=${activeProfile.id}`, {
             headers: { "X-User-Uid": user.uid },
           });
           if (res.ok) {
             const list: Outfit[] = await res.json();
-            setOutfits(list);
-            localStorage.setItem(`local_outfits_${activeProfile.id}`, JSON.stringify(list));
+            const storedOutfitsRaw = localStorage.getItem(`local_outfits_${activeProfile.id}`);
+            const localOutfits: Outfit[] = storedOutfitsRaw ? JSON.parse(storedOutfitsRaw) : [];
+            const localOutfitIds = new Set(localOutfits.map((o) => o.id));
+            const serverOnly = list.filter((o) => !localOutfitIds.has(o.id));
+            const mergedOutfits = [...localOutfits, ...serverOnly];
+
+            setOutfits(mergedOutfits);
+            localStorage.setItem(`local_outfits_${activeProfile.id}`, JSON.stringify(mergedOutfits));
+            setIsLoading(false);
+            return;
           }
         } catch {
-          // Server unavailable — local outfits are shown
+          // Server offline fallback
         }
+
+        const storedOutfits = localStorage.getItem(`local_outfits_${activeProfile.id}`);
+        if (storedOutfits) setOutfits(JSON.parse(storedOutfits));
+        setIsLoading(false);
       }
     } catch (err) {
       console.error("Error loading wardrobe data:", err);
