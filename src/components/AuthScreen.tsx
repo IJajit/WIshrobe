@@ -157,8 +157,8 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
   }
 
   return (
-    <div id="auth-screen" className="min-h-screen flex flex-col justify-between bg-[#F0F1F5] px-6 py-12 md:justify-center md:py-20 select-none">
-      <div className="flex flex-col items-center justify-center text-center space-y-4 md:mb-6">
+    <div id="auth-screen" className="min-h-screen flex flex-col justify-center items-center bg-[#F0F1F5] px-6 py-8 md:py-16 select-none space-y-6">
+      <div className="flex flex-col items-center justify-center text-center space-y-3">
         <div className="w-14 h-14 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center shadow-md">
           <Shirt className="w-6 h-6 stroke-[2]" />
         </div>
@@ -167,13 +167,13 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
             Wishrobe
             <Sparkle className="w-4 h-4 text-[#1A1A1A] fill-[#1A1A1A]" />
           </h1>
-          <p className="text-xs text-[#7F7F8E] font-medium capitalize tracking-wider mt-1.5">
+          <p className="text-xs text-[#7F7F8E] font-medium capitalize tracking-wider mt-1">
             Personal Closet
           </p>
         </div>
       </div>
 
-      <div className="w-full max-w-md mx-auto bg-white rounded-[32px] p-8 shadow-md border border-[#E5E7EB] space-y-6">
+      <div className="w-full max-w-md mx-auto bg-white rounded-[32px] p-6 sm:p-8 shadow-md border border-[#E5E7EB] space-y-5">
         <div className="space-y-1">
           <h2 className="text-xl font-bold text-gray-900">
             {isSignUp ? "Create your account" : "Welcome back"}
