@@ -1,7 +1,5 @@
 import React, { useState, useRef } from "react";
 import { Camera, Image as ImageIcon, X, ArrowRight, ArrowLeft, Check, Sparkles, AlertCircle } from "lucide-react";
-import { ref, uploadString, getDownloadURL } from "firebase/storage";
-import { storage } from "../firebase";
 import { Profile, ClothingItem } from "../types";
 import ImageProcessor from "./ImageProcessor";
 
@@ -172,7 +170,7 @@ export default function AddItemFlow({
     }
   };
 
-  // Compress image to max 600px JPEG at 75% quality — keeps localStorage under quota
+  // Compress image to max 600px JPEG — keeps localStorage under quota
   const compressImage = (dataUrl: string, maxPx = 600, quality = 0.75): Promise<string> => {
     return new Promise((resolve) => {
       const img = new window.Image();
@@ -185,6 +183,8 @@ export default function AddItemFlow({
         canvas.height = h;
         const ctx = canvas.getContext("2d");
         if (!ctx) { resolve(dataUrl); return; }
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
         resolve(canvas.toDataURL("image/jpeg", quality));
       };
@@ -199,23 +199,13 @@ export default function AddItemFlow({
     setSaveError(null);
 
     try {
-      // Compress image so it fits in localStorage (full photos can be 2-5MB)
       const compressedImage = await compressImage(processedImage);
-
-      // Try Firebase Storage upload first for a permanent URL
-      let imageUrl = compressedImage;
-      try {
-        const storageRef = ref(storage, `items/${userId}/${profile.id}/item-${Date.now()}.jpg`);
-        await uploadString(storageRef, compressedImage, "data_url");
-        imageUrl = await getDownloadURL(storageRef);
-      } catch {
-        // Firebase Storage unavailable — use compressed base64 directly
-      }
+      const itemId = `item-${Date.now()}`;
 
       const itemData = {
-        id: `item-${Date.now()}`,
+        id: itemId,
         profileId: profile.id,
-        imageUrl,
+        imageUrl: compressedImage,
         category,
         subcategory: subcategory.trim() || `${category} Item`,
         colors,
@@ -226,15 +216,15 @@ export default function AddItemFlow({
         customOffsetY: 0,
       };
 
-      // Save to localStorage immediately — always works
+      // Save to localStorage immediately — closes the modal instantly
       const storageKey = `wishrobe_items_${profile.id}`;
       const existing = JSON.parse(localStorage.getItem(storageKey) || "[]");
       existing.push(itemData);
       localStorage.setItem(storageKey, JSON.stringify(existing));
 
-      // Notify parent and close
       onItemAdded();
       onClose();
+      setIsSaving(false);
 
       // Sync to server in background — non-blocking
       fetch("/api/items", {
@@ -246,7 +236,6 @@ export default function AddItemFlow({
     } catch (err: any) {
       console.error("Save item error:", err);
       setSaveError("Failed to save item. Please try again.");
-    } finally {
       setIsSaving(false);
     }
   };

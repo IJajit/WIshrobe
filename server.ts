@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
@@ -12,6 +11,15 @@ const PORT = 3000;
 
 // Increase JSON payload limit to handle base64 image uploads
 app.use(express.json({ limit: "20mb" }));
+
+// Restore original URL from Vercel rewrite header so Express routes match
+app.use((req, _res, next) => {
+  const source = req.headers["x-vercel-rewrite-source"];
+  if (source && typeof source === "string") {
+    req.url = source;
+  }
+  next();
+});
 
 // Helper to lazily initialize Supabase client
 let supabaseClient: any = null;
@@ -26,7 +34,7 @@ function getSupabaseClient() {
   return supabaseClient;
 }
 
-// Helper to extract user ID from headers to support both real Firebase users and Local Sandbox
+// Helper to extract user ID from headers to support both Supabase Auth users and Local Sandbox
 const getUserId = (req: express.Request): string => {
   const uidHeader = req.headers["x-user-uid"];
   if (uidHeader && typeof uidHeader === "string") {
@@ -340,7 +348,7 @@ app.post("/api/items", async (req, res) => {
       return;
     }
 
-    const itemInsert = {
+    const itemInsert: any = {
       id: id || `item-${Date.now()}`,
       user_id: userId,
       profile_id: profileId,
@@ -350,8 +358,6 @@ app.post("/api/items", async (req, res) => {
       colors: Array.isArray(colors) ? colors : [],
       season: Array.isArray(season) ? season : [],
       occasion: Array.isArray(occasion) ? occasion : [],
-      custom_zoom: customZoom || 1.0,
-      custom_offset_y: customOffsetY || 0,
       created_at: createdAt || new Date().toISOString(),
       times_worn: 0,
       last_worn_at: null
@@ -371,8 +377,8 @@ app.post("/api/items", async (req, res) => {
       colors: itemInsert.colors,
       season: itemInsert.season,
       occasion: itemInsert.occasion,
-      customZoom: itemInsert.custom_zoom,
-      customOffsetY: itemInsert.custom_offset_y,
+      customZoom: customZoom || 1.0,
+      customOffsetY: customOffsetY || 0,
       createdAt: itemInsert.created_at,
       timesWorn: itemInsert.times_worn,
       lastWornAt: itemInsert.last_worn_at
@@ -397,9 +403,6 @@ app.put("/api/items/:id", async (req, res) => {
     if (colors !== undefined) updateData.colors = colors;
     if (season !== undefined) updateData.season = season;
     if (occasion !== undefined) updateData.occasion = occasion;
-    if (customZoom !== undefined) updateData.custom_zoom = customZoom;
-    if (customOffsetY !== undefined) updateData.custom_offset_y = customOffsetY;
-
     if (customZoom !== undefined || customOffsetY !== undefined) {
       const existing = localItemOverrides.get(itemId) || {};
       localItemOverrides.set(itemId, {
@@ -409,7 +412,7 @@ app.put("/api/items/:id", async (req, res) => {
     }
 
     const client = getSupabaseClient();
-    if (client) {
+    if (client && Object.keys(updateData).length > 0) {
       const { error } = await client.from("items").update(updateData).eq("id", itemId);
       if (error) {
         console.warn("Supabase update item warning:", error.message);
@@ -697,7 +700,7 @@ Return ONLY a valid JSON object matching this structure:
 }`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [
         {
           role: "user",
@@ -779,7 +782,7 @@ Return ONLY a valid JSON object matching the following structure without any mar
 }`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: [
         {
           role: "user",
@@ -805,6 +808,7 @@ Return ONLY a valid JSON object matching the following structure without any mar
 async function setupServer() {
   if (process.env.NODE_ENV !== "production") {
     console.log("Starting server in DEVELOPMENT mode with Vite middleware...");
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -819,9 +823,16 @@ async function setupServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (process.env.VERCEL !== "1") {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
-setupServer();
+const isVercel = process.env.VERCEL === "1";
+if (!isVercel) {
+  setupServer();
+}
+
+export default app;

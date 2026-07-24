@@ -123,13 +123,20 @@ export default function ImageProcessor({
         img.crossOrigin = "anonymous";
         img.onload = () => {
           URL.revokeObjectURL(blobUrl);
+
+          // Downsample to max 800px before CPU-heavy pixel ops & PNG encoding
+          const MAX_DIM = 800;
+          const scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+
           const canvas = document.createElement("canvas");
           const ctx = canvas.getContext("2d");
           if (!ctx) return;
 
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.drawImage(img, 0, 0);
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(img, 0, 0, w, h);
 
           try {
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -209,7 +216,15 @@ export default function ImageProcessor({
               }
             }
 
-            let cleanBase64 = canvas.toDataURL("image/png");
+            // Composite onto white background and output as fast JPEG
+            const finalCanvas = document.createElement("canvas");
+            finalCanvas.width = canvas.width;
+            finalCanvas.height = canvas.height;
+            const finalCtx = finalCanvas.getContext("2d")!;
+            finalCtx.fillStyle = "white";
+            finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+            finalCtx.drawImage(canvas, 0, 0);
+            let cleanBase64 = finalCanvas.toDataURL("image/jpeg", 0.9);
 
             // If visible clothing pixels found, crop canvas tightly around bounding box with small 4% margin
             if (hasVisible && maxX > minX && maxY > minY) {
@@ -222,12 +237,14 @@ export default function ImageProcessor({
 
               const croppedCtx = croppedCanvas.getContext("2d");
               if (croppedCtx) {
+                croppedCtx.fillStyle = "white";
+                croppedCtx.fillRect(0, 0, croppedCanvas.width, croppedCanvas.height);
                 croppedCtx.drawImage(
-                  canvas,
+                  finalCanvas,
                   minX, minY, cropW, cropH,
                   pad, pad, cropW, cropH
                 );
-                cleanBase64 = croppedCanvas.toDataURL("image/png");
+                cleanBase64 = croppedCanvas.toDataURL("image/jpeg", 0.9);
               }
             }
 
@@ -241,7 +258,14 @@ export default function ImageProcessor({
             setIsProcessing(false);
           } catch (cleanErr) {
             console.warn("Component filtering fallback:", cleanErr);
-            const rawBase64 = canvas.toDataURL("image/png");
+            const whiteCanvas = document.createElement("canvas");
+            whiteCanvas.width = canvas.width;
+            whiteCanvas.height = canvas.height;
+            const whiteCtx = whiteCanvas.getContext("2d")!;
+            whiteCtx.fillStyle = "white";
+            whiteCtx.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
+            whiteCtx.drawImage(canvas, 0, 0);
+            const rawBase64 = whiteCanvas.toDataURL("image/jpeg", 0.9);
             if (!isSubscribed) return;
             cachedCutoutRef.current = rawBase64;
             isCutoutGeneratedRef.current = true;

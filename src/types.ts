@@ -7,6 +7,8 @@ export interface Profile {
 
 export interface ClothingItem {
   id: string;
+  profileId: string;
+  userId?: string;
   imageUrl: string;
   category: "Tops" | "Bottoms" | "Skirts" | "Dresses" | "Full body & sets" | "Outerwear" | "Shoes" | "Accessories";
   subcategory: string;

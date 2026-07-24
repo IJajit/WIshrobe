@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "./firebase";
+import { supabase } from "./supabase";
 import { Profile, ClothingItem, Outfit } from "./types";
 import AuthScreen from "./components/AuthScreen";
 import ProfileSwitcher from "./components/ProfileSwitcher";
@@ -81,33 +80,37 @@ export default function App() {
 
   const [editingOutfit, setEditingOutfit] = useState<Outfit | null>(null);
 
-  // Auth observer
+  // Auth observer — listens for Supabase auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (usr) => {
-      if (usr) {
-        const userObj = { uid: usr.uid, email: usr.email || "user@applet.io" };
-        setUser(userObj);
-        // Sync user to SQL DB immediately on auth
-        fetch("/api/users/sync", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            uid: usr.uid,
-            email: usr.email || `${usr.uid.replace("local-user-", "")}@sandbox.local`,
-          }),
-        }).catch((err) => console.error("Error syncing user to SQL:", err));
-      } else {
-        if (!localStorage.getItem("supabase_user")) {
-          setActiveProfile(null);
-          setItems([]);
-          setOutfits([]);
-          setUser(null);
-        }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const u = session.user;
+        setUser({ uid: u.id, email: u.email || "user@applet.io" });
       }
     });
-    return unsubscribe;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const u = session.user;
+        const userObj = { uid: u.id, email: u.email || "user@applet.io" };
+        setUser(userObj);
+        fetch("/api/users/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            uid: u.id,
+            email: u.email || `${u.id.replace("local-user-", "")}@sandbox.local`,
+          }),
+        }).catch(() => {});
+      } else {
+        setActiveProfile(null);
+        setItems([]);
+        setOutfits([]);
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // Fetch PostgreSQL records whenever profile or tab swaps
@@ -139,6 +142,7 @@ export default function App() {
           };
         });
         setItems(restored);
+        setIsLoading(false);
 
         // 2. Try server in background — merge additively, never overwrite local
         try {
@@ -147,11 +151,9 @@ export default function App() {
           });
           if (res.ok) {
             const serverList: ClothingItem[] = await res.json();
-            // Re-read local (might have changed while fetch was in flight)
             const latestLocalRaw = localStorage.getItem(storageKey);
             const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
             const localIds = new Set(latestLocal.map((i) => i.id));
-            // Only add server items not already in local
             const serverOnly = serverList.filter((i) => !localIds.has(i.id));
             if (serverOnly.length > 0) {
               const merged = [...latestLocal, ...serverOnly];
@@ -175,6 +177,7 @@ export default function App() {
         // Outfits — load from localStorage first, then try server
         const storedOutfits = localStorage.getItem(`local_outfits_${activeProfile.id}`);
         if (storedOutfits) setOutfits(JSON.parse(storedOutfits));
+        setIsLoading(false);
 
         try {
           const res = await fetch(`/api/outfits?profileId=${activeProfile.id}`, {
@@ -191,18 +194,12 @@ export default function App() {
       }
     } catch (err) {
       console.error("Error loading wardrobe data:", err);
-    } finally {
       setIsLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (err) {
-      console.error("Firebase signOut error:", err);
-    }
-    localStorage.removeItem("supabase_user");
+    await supabase.auth.signOut();
     setUser(null);
     setActiveProfile(null);
     setItems([]);

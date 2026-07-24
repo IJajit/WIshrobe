@@ -1,7 +1,7 @@
-import { pgTable, text, integer, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, jsonb, numeric } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
-  uid: text("uid").primaryKey(), // Firebase Auth UID
+  uid: text("uid").primaryKey(), // Auth UID (Supabase or sandbox)
   email: text("email").notNull(),
   createdAt: text("created_at").notNull(),
 });
@@ -27,9 +27,11 @@ export const items = pgTable("items", {
   imageUrl: text("image_url").notNull(),
   category: text("category").notNull(),
   subcategory: text("subcategory").notNull(),
-  colors: jsonb("colors").notNull(), // string[]
-  season: jsonb("season").notNull(), // string[]
-  occasion: jsonb("occasion").notNull(), // string[]
+  colors: jsonb("colors").notNull(),
+  season: jsonb("season").notNull(),
+  occasion: jsonb("occasion").notNull(),
+  customZoom: numeric("custom_zoom").default("1.0"),
+  customOffsetY: integer("custom_offset_y").default(0),
   createdAt: text("created_at").notNull(),
   timesWorn: integer("times_worn").default(0).notNull(),
   lastWornAt: text("last_worn_at"),
