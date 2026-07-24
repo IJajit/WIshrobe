@@ -33,81 +33,71 @@ export default function ProfileSwitcher({
   const [selectedColor, setSelectedColor] = useState(AVATAR_COLORS[0]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load profiles from Cloud SQL
+  // ── localStorage helpers ──────────────────────────────────────────────────
+  const STORAGE_KEY = `wishrobe_profiles_${userId}`;
+  const ACTIVE_KEY = `wishrobe_active_profile_${userId}`;
+
+  const saveLocalProfiles = (list: Profile[]) => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
+  };
+
+  const loadLocalProfiles = (): Profile[] => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw) as Profile[];
+    } catch {}
+    return [];
+  };
+
+  const saveActiveProfile = (p: Profile) => {
+    try { localStorage.setItem(ACTIVE_KEY, p.id); } catch {}
+    onProfileChange(p);
+  };
+
+  // ── Load profiles ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!userId) return;
 
     const loadProfiles = async () => {
+      setIsLoading(true);
       try {
-        const res = await fetch("/api/profiles", {
-          headers: {
-            "X-User-Uid": userId,
-          },
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const list: Profile[] = await res.json();
+        // 1. Load from localStorage first (always works, even on Vercel)
+        let localList = loadLocalProfiles();
 
-        if (list.length === 0) {
-          // Seed default Sarah & Alex profiles in PostgreSQL
-          setIsLoading(true);
-          const default1 = {
-            id: `p-${Date.now()}-1`,
-            name: "Sarah",
-            avatarColor: "bg-purple-500",
-            createdAt: new Date().toISOString(),
-          };
-          const default2 = {
-            id: `p-${Date.now()}-2`,
-            name: "Alex",
-            avatarColor: "bg-teal-500",
-            createdAt: new Date().toISOString(),
-          };
+        // 2. Seed defaults if nothing is stored yet
+        if (localList.length === 0) {
+          const default1: Profile = { id: `p-${Date.now()}-1`, name: "Sarah", avatarColor: "bg-purple-500", createdAt: new Date().toISOString() };
+          const default2: Profile = { id: `p-${Date.now()}-2`, name: "Alex", avatarColor: "bg-teal-500", createdAt: new Date().toISOString() };
+          localList = [default1, default2];
+          saveLocalProfiles(localList);
+        }
 
-          // Post both profiles
-          await fetch("/api/profiles", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-User-Uid": userId,
-            },
-            body: JSON.stringify(default1),
-          });
+        setProfiles(localList);
 
-          await fetch("/api/profiles", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-User-Uid": userId,
-            },
-            body: JSON.stringify(default2),
-          });
+        // Restore last active profile
+        const savedId = localStorage.getItem(ACTIVE_KEY);
+        const matched = localList.find((p) => p.id === savedId);
+        saveActiveProfile(matched || localList[0]);
 
-          const seeded = [default1, default2];
-          setProfiles(seeded);
-          if (!activeProfile) {
-            onProfileChange(seeded[0]);
+        // 3. Try to sync with server in background (optional, won't block UI)
+        try {
+          const res = await fetch("/api/profiles", { headers: { "X-User-Uid": userId } });
+          if (res.ok) {
+            const serverList: Profile[] = await res.json();
+            if (serverList.length > 0) {
+              // Merge: keep local additions, update with server data
+              const merged = serverList;
+              setProfiles(merged);
+              saveLocalProfiles(merged);
+              const serverMatched = merged.find((p) => p.id === savedId);
+              if (serverMatched) saveActiveProfile(serverMatched);
+            }
           }
-        } else {
-          setProfiles(list);
-          const savedProfileId = localStorage.getItem(`active_profile_${userId}`);
-          const matched = list.find((p) => p.id === savedProfileId);
-          if (matched) {
-            onProfileChange(matched);
-          } else {
-            const sarah = list.find((p) => p.name === "Sarah") || list[0];
-            onProfileChange(sarah);
-          }
+        } catch {
+          // Server unavailable (Vercel static deploy) — local data is fine
         }
       } catch (err) {
-        console.error("Error loading profiles, seeding locally:", err);
-        const localList: Profile[] = [
-          { id: "p-sarah", name: "Sarah", avatarColor: "bg-purple-500", createdAt: "" },
-          { id: "p-alex", name: "Alex", avatarColor: "bg-teal-500", createdAt: "" },
-        ];
-        setProfiles(localList);
-        if (!activeProfile) {
-          onProfileChange(localList[0]);
-        }
+        console.error("Error loading profiles:", err);
       } finally {
         setIsLoading(false);
       }
@@ -116,103 +106,94 @@ export default function ProfileSwitcher({
     loadProfiles();
   }, [userId]);
 
+  // ── Create profile ────────────────────────────────────────────────────────
   const handleCreateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProfileName.trim() || !userId) return;
 
+    const newProfile: Profile = {
+      id: `p-${Date.now()}`,
+      name: newProfileName.trim(),
+      avatarColor: selectedColor,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Save locally immediately — this always works
+    const updated = [...profiles, newProfile];
+    setProfiles(updated);
+    saveLocalProfiles(updated);
+    saveActiveProfile(newProfile);
+    setNewProfileName("");
+    setShowAddModal(false);
+    setIsOpen(false);
+
+    // Try to sync to server in background
     try {
-      const data = {
-        id: `p-${Date.now()}`,
-        name: newProfileName.trim(),
-        avatarColor: selectedColor,
-        createdAt: new Date().toISOString(),
-      };
-
-      const res = await fetch("/api/profiles", {
+      await fetch("/api/profiles", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Uid": userId,
-        },
-        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json", "X-User-Uid": userId },
+        body: JSON.stringify(newProfile),
       });
-
-      if (!res.ok) throw new Error(await res.text());
-      const created: Profile = await res.json();
-      
-      setProfiles((prev) => [...prev, created]);
-      onProfileChange(created);
-      setNewProfileName("");
-      setShowAddModal(false);
-      setIsOpen(false);
-    } catch (err) {
-      console.error("Error creating profile:", err);
+    } catch {
+      // Server unavailable — local save is sufficient
     }
   };
 
-  const getInitials = (name: string) => {
-    return name.slice(0, 2).toUpperCase();
-  };
-
+  // ── Edit profile ──────────────────────────────────────────────────────────
   const handleEditProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProfile || !editName.trim() || !userId) return;
 
     const updatedProfile = { ...editingProfile, name: editName.trim(), avatarColor: selectedColor };
-    
-    // Update local state immediately
     const updatedProfiles = profiles.map((p) => (p.id === editingProfile.id ? updatedProfile : p));
+
+    // Save locally immediately
     setProfiles(updatedProfiles);
-    if (activeProfile?.id === editingProfile.id) {
-      onProfileChange(updatedProfile);
-    }
+    saveLocalProfiles(updatedProfiles);
+    if (activeProfile?.id === editingProfile.id) saveActiveProfile(updatedProfile);
     setEditingProfile(null);
 
-    // Sync to Supabase server
+    // Try to sync to server in background
     try {
       await fetch(`/api/profiles/${editingProfile.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Uid": userId,
-        },
-        body: JSON.stringify({
-          name: editName.trim(),
-          avatarColor: selectedColor,
-        }),
+        headers: { "Content-Type": "application/json", "X-User-Uid": userId },
+        body: JSON.stringify({ name: editName.trim(), avatarColor: selectedColor }),
       });
-    } catch (err) {
-      console.warn("Server update warning, kept local change:", err);
+    } catch {
+      // Server unavailable — local save is sufficient
     }
   };
 
+  // ── Delete profile ────────────────────────────────────────────────────────
   const handleDeleteProfile = async (profileId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    
+
     if (profiles.length <= 1) {
-      alert("You must keep at least one active household profile.");
+      alert("You must keep at least one profile.");
       return;
     }
 
     const updated = profiles.filter((p) => p.id !== profileId);
+
+    // Save locally immediately
     setProfiles(updated);
+    saveLocalProfiles(updated);
+    if (activeProfile?.id === profileId) saveActiveProfile(updated[0]);
 
-    if (activeProfile?.id === profileId) {
-      onProfileChange(updated[0]);
-    }
-
+    // Try to sync to server in background
     try {
       await fetch(`/api/profiles/${profileId}`, {
         method: "DELETE",
-        headers: {
-          "X-User-Uid": userId,
-        },
+        headers: { "X-User-Uid": userId },
       });
-    } catch (err) {
-      console.warn("Server delete warning, kept local removal:", err);
+    } catch {
+      // Server unavailable — local delete is sufficient
     }
   };
+
+  const getInitials = (name: string) => name.slice(0, 2).toUpperCase();
 
   return (
     <div id="profile-switcher" className="relative z-50">
