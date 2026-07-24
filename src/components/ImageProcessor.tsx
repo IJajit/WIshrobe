@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Wand2, RefreshCw, AlertCircle, RotateCw, Eraser, Undo2, ZoomIn, ZoomOut, Maximize2, Crop, X } from "lucide-react";
+import { Wand2, RefreshCw, AlertCircle, RotateCw, Eraser, Undo2, ZoomIn, ZoomOut, Maximize2, Crop, X, Check } from "lucide-react";
 import { removeBackground } from "@imgly/background-removal";
 
 interface ImageProcessorProps {
