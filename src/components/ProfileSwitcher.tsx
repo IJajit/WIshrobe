@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import ReactDOM from "react-dom";
 import { Profile } from "../types";
 import { Users, Plus, Check, ChevronDown, UserPlus, X, Trash2, Edit2 } from "lucide-react";
 
@@ -317,10 +318,10 @@ export default function ProfileSwitcher({
           </div>
       )}
 
-      {/* Add Profile Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-5 animate-in zoom-in-95 duration-150 shadow-2xl">
+      {/* Add Profile Modal — rendered via portal to avoid fixed-positioning issues */}
+      {showAddModal && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end justify-center sm:items-center p-4 z-[999]" onClick={() => setShowAddModal(false)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-5 animate-in zoom-in-95 duration-150 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-gray-900 flex items-center gap-1.5">
                 <UserPlus className="w-5 h-5 text-emerald-500" />
@@ -344,6 +345,7 @@ export default function ProfileSwitcher({
                   onChange={(e) => setNewProfileName(e.target.value)}
                   maxLength={15}
                   required
+                  autoFocus
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
@@ -372,13 +374,14 @@ export default function ProfileSwitcher({
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Edit Profile Modal */}
-      {editingProfile && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-5 animate-in zoom-in-95 duration-150 shadow-2xl">
+      {/* Edit Profile Modal — rendered via portal */}
+      {editingProfile && ReactDOM.createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end justify-center sm:items-center p-4 z-[999]" onClick={() => setEditingProfile(null)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-5 animate-in zoom-in-95 duration-150 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-gray-900 flex items-center gap-1.5">
                 <Edit2 className="w-5 h-5 text-emerald-500" />
@@ -440,7 +443,8 @@ export default function ProfileSwitcher({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
