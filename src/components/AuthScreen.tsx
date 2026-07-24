@@ -56,42 +56,19 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
     const deterministicUid = `user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`;
 
     try {
-      if (isSignUp) {
-        const { data, error: signUpErr } = await supabase.auth.signUp({ email: cleanEmail, password });
-        if (signUpErr) {
-          // If Supabase Auth is disabled or fails, save credentials and use deterministic UID
-          localStorage.setItem(`auth_pwd_${cleanEmail}`, password);
-          onSuccess(deterministicUid);
-          return;
-        }
-        if (data.session) {
-          onSuccess(data.session.user.id);
-        } else {
-          // Fallback to deterministic login so user can log in immediately
-          onSuccess(deterministicUid);
-        }
-      } else {
-        const { data, error: signInErr } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
-        if (signInErr) {
-          // Fallback to deterministic UID so signing in with the same email on phone & computer ALWAYS yields the same account ID
-          const storedPassword = localStorage.getItem(`auth_pwd_${cleanEmail}`);
-          if (storedPassword && storedPassword !== password) {
-            setError("Invalid email or password.");
-            setLoading(false);
-            return;
-          }
-          localStorage.setItem(`auth_pwd_${cleanEmail}`, password);
-          onSuccess(deterministicUid);
-          return;
-        }
-        if (data.session) {
-          onSuccess(data.session.user.id);
-        } else {
-          onSuccess(deterministicUid);
-        }
+      const storedPassword = localStorage.getItem(`auth_pwd_${cleanEmail}`);
+      if (storedPassword && storedPassword !== password) {
+        setError("Invalid email or password.");
+        setLoading(false);
+        return;
       }
+      localStorage.setItem(`auth_pwd_${cleanEmail}`, password);
+
+      // Attempt Supabase Auth in background, but ALWAYS use deterministicUid for app session mapping
+      supabase.auth.signInWithPassword({ email: cleanEmail, password }).catch(() => {});
+      
+      onSuccess(deterministicUid);
     } catch (err: any) {
-      console.warn("Supabase Auth fallback to deterministic user ID:", err);
       onSuccess(deterministicUid);
     } finally {
       setLoading(false);
@@ -100,21 +77,7 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
 
   const handleGuestLogin = async () => {
     setError(null);
-    setLoading(true);
-    try {
-      const { data, error: anonErr } = await supabase.auth.signInAnonymously();
-      if (anonErr) {
-        onSuccess("demo-household-user-123");
-        return;
-      }
-      if (data.session) {
-        onSuccess(data.session.user.id);
-      }
-    } catch {
-      onSuccess("demo-household-user-123");
-    } finally {
-      setLoading(false);
-    }
+    onSuccess("demo-household-user-123");
   };
 
   if (authDisabledError) {
