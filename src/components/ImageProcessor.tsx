@@ -580,38 +580,69 @@ export default function ImageProcessor({
             />
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-            {/* Precision Zoom Controls */}
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-medium text-gray-500 mr-1">Zoom:</span>
-              <button
-                type="button"
-                onClick={() => setZoomLevel((z) => Math.max(1, +(z - 0.5).toFixed(1)))}
-                disabled={zoomLevel <= 1}
-                className="p-1 bg-white text-gray-700 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-100 transition"
-                title="Zoom Out"
-              >
-                <ZoomOut className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-[11px] font-medium text-gray-700 px-1.5">{zoomLevel}x</span>
-              <button
-                type="button"
-                onClick={() => setZoomLevel((z) => Math.min(3, +(z + 0.5).toFixed(1)))}
-                disabled={zoomLevel >= 3}
-                className="p-1 bg-white text-gray-700 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-100 transition"
-                title="Zoom In"
-              >
-                <ZoomIn className="w-3.5 h-3.5" />
-              </button>
-              {zoomLevel > 1 && (
-                <div className="flex items-center gap-1 ml-1 border-l border-slate-200 pl-1.5">
+          <div className="space-y-2.5 pt-2 border-t border-slate-200">
+            {/* Top row: Zoom (- / +) and Undo/Done */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-medium text-gray-500 mr-0.5">Zoom:</span>
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((z) => Math.max(1, +(z - 0.5).toFixed(1)))}
+                  disabled={zoomLevel <= 1}
+                  className="p-1 bg-white text-gray-700 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-100 transition"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-bold text-gray-800 px-1.5">{zoomLevel}x</span>
+                <button
+                  type="button"
+                  onClick={() => setZoomLevel((z) => Math.min(3, +(z + 0.5).toFixed(1)))}
+                  disabled={zoomLevel >= 3}
+                  className="p-1 bg-white text-gray-700 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-100 transition"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={historyStack.length <= 1}
+                  className={`px-3 py-1.5 text-[11px] font-medium rounded-xl border flex items-center gap-1 transition ${
+                    historyStack.length > 1
+                      ? "bg-white text-gray-700 border-slate-200 hover:bg-slate-100 shadow-xs"
+                      : "bg-slate-100 text-gray-400 border-slate-200 cursor-not-allowed"
+                  }`}
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  <span>Undo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleEraser}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] rounded-xl shadow-xs transition flex items-center gap-1"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Done</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom row (when zoomed in): Erase, Pan, and Reset mode toggles */}
+            {zoomLevel > 1 && (
+              <div className="flex items-center justify-between bg-white p-1.5 rounded-xl border border-slate-200 animate-in fade-in duration-150">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-gray-400 px-1">Tool:</span>
                   <button
                     type="button"
                     onClick={() => setActiveTool("brush")}
-                    className={`p-1 rounded-lg border text-[10px] font-semibold flex items-center gap-1 transition ${
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 transition ${
                       activeTool === "brush"
                         ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                        : "bg-white text-gray-700 border-slate-200 hover:bg-slate-100"
+                        : "bg-slate-50 text-gray-700 border-slate-200 hover:bg-slate-100"
                     }`}
                     title="Brush Tool (Erase)"
                   >
@@ -621,54 +652,31 @@ export default function ImageProcessor({
                   <button
                     type="button"
                     onClick={() => setActiveTool("pan")}
-                    className={`p-1 rounded-lg border text-[10px] font-semibold flex items-center gap-1 transition ${
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 transition ${
                       activeTool === "pan"
                         ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                        : "bg-white text-gray-700 border-slate-200 hover:bg-slate-100"
+                        : "bg-slate-50 text-gray-700 border-slate-200 hover:bg-slate-100"
                     }`}
                     title="Pan Tool (Move Zoomed Image)"
                   >
                     <Maximize2 className="w-3.5 h-3.5" />
                     <span>Pan</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setZoomLevel(1);
-                      setPanOffset({ x: 0, y: 0 });
-                      setActiveTool("brush");
-                    }}
-                    className="text-[9px] font-medium text-gray-600 bg-slate-200 px-2 py-1 rounded-lg ml-0.5 hover:bg-slate-300 transition"
-                  >
-                    Reset
-                  </button>
                 </div>
-              )}
-            </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleUndo}
-                disabled={historyStack.length <= 1}
-                className={`px-3 py-1.5 text-[11px] font-medium rounded-xl border flex items-center gap-1 transition ${
-                  historyStack.length > 1
-                    ? "bg-white text-gray-700 border-slate-200 hover:bg-slate-100 shadow-xs"
-                    : "bg-slate-100 text-gray-400 border-slate-200 cursor-not-allowed"
-                }`}
-              >
-                <Undo2 className="w-3.5 h-3.5" />
-                Undo
-              </button>
-
-              <button
-                type="button"
-                onClick={handleToggleEraser}
-                className="px-4 py-1.5 bg-black text-white text-[11px] font-medium rounded-xl hover:bg-zinc-800 transition shadow-sm"
-              >
-                Save
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomLevel(1);
+                    setPanOffset({ x: 0, y: 0 });
+                    setActiveTool("brush");
+                  }}
+                  className="text-[10px] font-medium text-gray-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg border border-slate-200 transition"
+                >
+                  Reset Zoom
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
