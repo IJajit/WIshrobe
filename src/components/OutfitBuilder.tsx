@@ -63,29 +63,37 @@ export default function OutfitBuilder({
 
     const loadCatalog = async () => {
       try {
+        const storageKey = `wishrobe_items_${profile.id}`;
+        const localRaw = localStorage.getItem(storageKey);
+        const localList: ClothingItem[] = localRaw ? JSON.parse(localRaw) : [];
+        if (localList.length > 0) {
+          setCatalog(localList);
+          setIsLoadingCatalog(false);
+        }
+
         const res = await fetch(`/api/items?profileId=${profile.id}`, {
           headers: {
             "X-User-Uid": userId,
           },
         });
-        if (!res.ok) throw new Error(await res.text());
-        const list: ClothingItem[] = await res.json();
-        setCatalog(list);
-
+        if (res.ok) {
+          const list: ClothingItem[] = await res.json();
+          // Merge local and server items
+          const combined = [...localList];
+          for (const item of list) {
+            if (!combined.some((c) => c.id === item.id)) {
+              combined.push(item);
+            }
+          }
         // Handle initial outfit editing or starting item pre-selection
         if (initialOutfit) {
           setOutfitName(initialOutfit.name);
           setOccasionTag(initialOutfit.occasion);
-          const matched = list.filter((item) => initialOutfit.itemIds.includes(item.id));
+          const currentList = localList.length > 0 ? localList : [];
+          const matched = currentList.filter((item) => initialOutfit.itemIds.includes(item.id));
           setSelectedItems(matched);
         } else if (startingItem) {
-          // Verify it's in the loaded list (or just add it)
-          const found = list.find((item) => item.id === startingItem.id);
-          if (found) {
-            setSelectedItems([found]);
-          } else {
-            setSelectedItems([startingItem]);
-          }
+          setSelectedItems([startingItem]);
         }
       } catch (err) {
         console.error("Error loading items for builder:", err);

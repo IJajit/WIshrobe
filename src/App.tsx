@@ -705,9 +705,6 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-[#1A1A1A] uppercase tracking-wider">No outfits saved</h3>
-                    <p className="text-xs text-[#7F7F8E] max-w-xs mt-2.5 leading-relaxed">
-                      Combine items to visualize looks. Tap the mint <b>Create</b> button to assemble a new outfit canvas.
-                    </p>
                   </div>
                 </div>
               ) : (
