@@ -3,7 +3,7 @@ import { supabase } from "../supabase";
 import { Sparkles, Shirt, Lock, Mail, UserPlus, LogIn, Sparkle, AlertTriangle } from "lucide-react";
 
 interface AuthScreenProps {
-  onSuccess: (uid: string) => void;
+  onSuccess: (userObj: { uid: string; email: string }) => void;
 }
 
 export default function AuthScreen({ onSuccess }: AuthScreenProps) {
@@ -19,7 +19,7 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
     const cleanEmail = email.toLowerCase().trim();
 
     if (!cleanEmail || !password) {
-      onSuccess("guest-sandbox-user");
+      onSuccess({ uid: "guest-sandbox-user", email: "guest@sandbox.local" });
       return;
     }
 
@@ -32,11 +32,11 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
         return;
       }
       localStorage.setItem(`auth_pwd_${cleanEmail}`, password);
-      onSuccess(`local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`);
+      onSuccess({ uid: `local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`, email: cleanEmail });
     } else {
       if (!storedPassword) {
         localStorage.setItem(`auth_pwd_${cleanEmail}`, password);
-        onSuccess(`local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`);
+        onSuccess({ uid: `local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`, email: cleanEmail });
         return;
       }
       if (storedPassword !== password) {
@@ -44,7 +44,7 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
         setAuthDisabledError(false);
         return;
       }
-      onSuccess(`local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`);
+      onSuccess({ uid: `local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`, email: cleanEmail });
     }
   };
 
@@ -67,9 +67,9 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
       // Attempt Supabase Auth in background, but ALWAYS use deterministicUid for app session mapping
       supabase.auth.signInWithPassword({ email: cleanEmail, password }).catch(() => {});
       
-      onSuccess(deterministicUid);
+      onSuccess({ uid: deterministicUid, email: cleanEmail });
     } catch (err: any) {
-      onSuccess(deterministicUid);
+      onSuccess({ uid: deterministicUid, email: cleanEmail });
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,7 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
 
   const handleGuestLogin = async () => {
     setError(null);
-    onSuccess("demo-household-user-123");
+    onSuccess({ uid: "demo-household-user-123", email: "guest@sandbox.local" });
   };
 
   if (authDisabledError) {

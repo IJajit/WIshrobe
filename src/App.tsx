@@ -80,38 +80,19 @@ export default function App() {
 
   const [editingOutfit, setEditingOutfit] = useState<Outfit | null>(null);
 
-  // Auth observer — listens for Supabase auth state changes
+  // User session sync helper
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        const u = session.user;
-        setUser({ uid: u.id, email: u.email || "user@applet.io" });
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        const u = session.user;
-        const userObj = { uid: u.id, email: u.email || "user@applet.io" };
-        setUser(userObj);
-        fetch("/api/users/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            uid: u.id,
-            email: u.email || `${u.id.replace("local-user-", "")}@sandbox.local`,
-          }),
-        }).catch(() => {});
-      } else {
-        setActiveProfile(null);
-        setItems([]);
-        setOutfits([]);
-        setUser(null);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+    if (user?.uid && user?.email) {
+      fetch("/api/users/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+        }),
+      }).catch(() => {});
+    }
+  }, [user]);
 
   // Fetch PostgreSQL records whenever profile or tab swaps
   useEffect(() => {
@@ -458,14 +439,13 @@ export default function App() {
   if (!user) {
     return (
       <AuthScreen
-        onSuccess={(uid) => {
-          const userObj = { uid };
+        onSuccess={(userObj) => {
           // If switching to a new user, reset local cached profile ID so the app loads the new account's profiles from server
           const prevUser = localStorage.getItem("supabase_user");
           if (prevUser) {
             try {
               const parsed = JSON.parse(prevUser);
-              if (parsed.uid !== uid) {
+              if (parsed.uid !== userObj.uid) {
                 // Clear active profile reference for previous user
                 Object.keys(localStorage).forEach((key) => {
                   if (key.startsWith("wishrobe_active_profile_")) {
