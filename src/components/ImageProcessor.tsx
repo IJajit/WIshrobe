@@ -553,7 +553,7 @@ export default function ImageProcessor({
               if (isPanning) handlePanEnd();
               else stopErasing();
             }}
-            className={`max-w-full max-h-full object-contain absolute inset-0 m-auto z-10 ${
+            className={`w-full h-full absolute inset-0 object-contain z-10 bg-transparent ${
               isErasing ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
             } ${
               isErasing && activeTool === "pan"
