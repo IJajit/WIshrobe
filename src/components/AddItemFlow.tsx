@@ -170,8 +170,8 @@ export default function AddItemFlow({
     }
   };
 
-  // Compress image to max 600px JPEG — keeps localStorage under quota
-  const compressImage = (dataUrl: string, maxPx = 600, quality = 0.75): Promise<string> => {
+  // Compress image to max 600px PNG — preserves transparent cutouts
+  const compressImage = (dataUrl: string, maxPx = 600): Promise<string> => {
     return new Promise((resolve) => {
       const img = new window.Image();
       img.onload = () => {
@@ -183,10 +183,8 @@ export default function AddItemFlow({
         canvas.height = h;
         const ctx = canvas.getContext("2d");
         if (!ctx) { resolve(dataUrl); return; }
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, w, h);
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
+        resolve(canvas.toDataURL("image/png"));
       };
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;
