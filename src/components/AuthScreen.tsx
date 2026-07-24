@@ -53,9 +53,24 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
     setError(null);
     setLoading(true);
     const cleanEmail = email.toLowerCase().trim();
-    const deterministicUid = cleanEmail.replace(/[^a-zA-Z0-9]/g, "-");
+    const fallbackUid = cleanEmail.replace(/[^a-zA-Z0-9]/g, "-");
 
     try {
+      if (isSignUp) {
+        const { data, error: signUpErr } = await supabase.auth.signUp({ email: cleanEmail, password });
+        if (!signUpErr && data.user) {
+          onSuccess({ uid: data.user.id, email: cleanEmail });
+          return;
+        }
+      } else {
+        const { data, error: signInErr } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+        if (!signInErr && data.user) {
+          onSuccess({ uid: data.user.id, email: cleanEmail });
+          return;
+        }
+      }
+
+      // If Supabase Auth is disabled or fails, fallback to local pwd check & fallbackUid
       const storedPassword = localStorage.getItem(`auth_pwd_${cleanEmail}`);
       if (storedPassword && storedPassword !== password) {
         setError("Invalid email or password.");
@@ -63,13 +78,9 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
         return;
       }
       localStorage.setItem(`auth_pwd_${cleanEmail}`, password);
-
-      // Attempt Supabase Auth in background, but ALWAYS use deterministicUid for app session mapping
-      supabase.auth.signInWithPassword({ email: cleanEmail, password }).catch(() => {});
-      
-      onSuccess({ uid: deterministicUid, email: cleanEmail });
+      onSuccess({ uid: fallbackUid, email: cleanEmail });
     } catch (err: any) {
-      onSuccess({ uid: deterministicUid, email: cleanEmail });
+      onSuccess({ uid: fallbackUid, email: cleanEmail });
     } finally {
       setLoading(false);
     }
