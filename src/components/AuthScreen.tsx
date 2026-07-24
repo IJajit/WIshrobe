@@ -53,7 +53,7 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
     setError(null);
     setLoading(true);
     const cleanEmail = email.toLowerCase().trim();
-    const deterministicUid = `user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`;
+    const deterministicUid = cleanEmail.replace(/[^a-zA-Z0-9]/g, "-");
 
     try {
       const storedPassword = localStorage.getItem(`auth_pwd_${cleanEmail}`);
