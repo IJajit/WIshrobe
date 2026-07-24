@@ -118,12 +118,14 @@ export default function App() {
             const latestLocalRaw = localStorage.getItem(storageKey);
             const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
 
-            // If server returns items, or if local is empty, sync server items to local storage
+            // If server returns items, use server items directly so incognito tabs immediately show updated DB items
             let finalItems = serverList;
-            if (latestLocal.length > 0) {
-              const localIds = new Set(latestLocal.map((i) => i.id));
-              const serverOnly = serverList.filter((i) => !localIds.has(i.id));
-              finalItems = [...latestLocal, ...serverOnly];
+            if (serverList.length === 0 && latestLocal.length > 0) {
+              finalItems = latestLocal;
+            } else if (serverList.length > 0 && latestLocal.length > 0) {
+              const serverIds = new Set(serverList.map((i) => i.id));
+              const localOnly = latestLocal.filter((i) => !serverIds.has(i.id));
+              finalItems = [...serverList, ...localOnly];
             }
 
             localStorage.setItem(storageKey, JSON.stringify(finalItems));
