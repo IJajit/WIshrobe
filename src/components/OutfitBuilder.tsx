@@ -209,42 +209,76 @@ export default function OutfitBuilder({
     // If starting item is on canvas, pass its ID to build around
     const seedItemId = selectedItems.length > 0 ? selectedItems[0].id : undefined;
 
-    // If AI server call fails or API key is not configured, generate smart outfit pairing locally
+    // If AI server call fails or API key is not configured, generate smart outfit pairing locally with proper outfit logic
     const fallbackLocalSuggestions = (): SuggestedOutfit[] => {
       if (catalog.length < 2) return [];
       const tops = catalog.filter((i) => i.category === "Tops");
       const bottoms = catalog.filter((i) => i.category === "Bottoms" || i.category === "Skirts");
+      const dresses = catalog.filter((i) => i.category === "Dresses" || i.category === "Full body & sets");
       const shoes = catalog.filter((i) => i.category === "Shoes");
       const outerwear = catalog.filter((i) => i.category === "Outerwear");
+      const accessories = catalog.filter((i) => i.category === "Accessories");
 
       const seedItem = selectedItems.length > 0 ? selectedItems[0] : null;
       const suggestions: SuggestedOutfit[] = [];
 
+      // Helper to validate that an outfit has valid combination logic (e.g. Top + Bottom/Skirt, or Dress/Full body)
+      const isValidOutfit = (itemIds: string[]) => {
+        const selected = itemIds.map((id) => catalog.find((c) => c.id === id)).filter((c): c is ClothingItem => !!c);
+        const categories = selected.map((s) => s.category);
+        const hasTop = categories.includes("Tops");
+        const hasBottom = categories.includes("Bottoms") || categories.includes("Skirts");
+        const hasDress = categories.includes("Dresses") || categories.includes("Full body & sets");
+        
+        // Ensure no multiple tops or multiple bottoms in the same outfit
+        const topCount = categories.filter((c) => c === "Tops").length;
+        const bottomCount = categories.filter((c) => c === "Bottoms" || c === "Skirts").length;
+
+        return (hasDress || (hasTop && hasBottom)) && topCount <= 1 && bottomCount <= 1;
+      };
+
       if (seedItem) {
         if (seedItem.category === "Tops") {
-          const partnerBottom = bottoms[0] || catalog.find((i) => i.id !== seedItem.id);
+          const partnerBottom = bottoms[0];
           if (partnerBottom) {
             const items = [seedItem.id, partnerBottom.id];
             if (shoes[0]) items.push(shoes[0].id);
-            suggestions.push({
-              name: `Casual ${seedItem.subcategory || "Top"} Look`,
-              itemIds: items,
-              occasion: "Casual",
-              stylistNotes: `Paired your ${seedItem.subcategory || "top"} with ${partnerBottom.subcategory || "bottoms"} for a balanced everyday outfit.`,
-            });
+            if (accessories[0]) items.push(accessories[0].id);
+            if (isValidOutfit(items)) {
+              suggestions.push({
+                name: `${seedItem.subcategory || "Top"} & ${partnerBottom.subcategory || "Bottom"} Look`,
+                itemIds: items,
+                occasion: "Casual",
+                stylistNotes: `Styled your ${seedItem.subcategory || "top"} with matching ${partnerBottom.subcategory || "bottoms"}.`,
+              });
+            }
           }
         } else if (seedItem.category === "Bottoms" || seedItem.category === "Skirts") {
-          const partnerTop = tops[0] || catalog.find((i) => i.id !== seedItem.id);
+          const partnerTop = tops[0];
           if (partnerTop) {
             const items = [partnerTop.id, seedItem.id];
             if (shoes[0]) items.push(shoes[0].id);
-            suggestions.push({
-              name: `Classic ${seedItem.subcategory || "Bottom"} Ensemble`,
-              itemIds: items,
-              occasion: "Casual",
-              stylistNotes: `Styled your ${seedItem.subcategory || "bottom"} with ${partnerTop.subcategory || "top"}.`,
-            });
+            if (accessories[0]) items.push(accessories[0].id);
+            if (isValidOutfit(items)) {
+              suggestions.push({
+                name: `${partnerTop.subcategory || "Top"} & ${seedItem.subcategory || "Bottom"} Look`,
+                itemIds: items,
+                occasion: "Casual",
+                stylistNotes: `Styled your ${seedItem.subcategory || "bottom"} with ${partnerTop.subcategory || "top"}.`,
+              });
+            }
           }
+        } else if (seedItem.category === "Dresses" || seedItem.category === "Full body & sets") {
+          const items = [seedItem.id];
+          if (outerwear[0]) items.push(outerwear[0].id);
+          if (shoes[0]) items.push(shoes[0].id);
+          if (accessories[0]) items.push(accessories[0].id);
+          suggestions.push({
+            name: `${seedItem.subcategory || "Dress"} Style`,
+            itemIds: items,
+            occasion: "Casual",
+            stylistNotes: `Complete look centered around your ${seedItem.subcategory || "dress"}.`,
+          });
         }
       }
 
@@ -253,24 +287,34 @@ export default function OutfitBuilder({
         const items = [tops[0].id, bottoms[0].id];
         if (outerwear[0]) items.push(outerwear[0].id);
         else if (shoes[0]) items.push(shoes[0].id);
-        suggestions.push({
-          name: "Signature Everyday Look",
-          itemIds: items,
-          occasion: "Casual",
-          stylistNotes: "A clean, effortless daily combination created from your closet basics.",
-        });
+        if (isValidOutfit(items)) {
+          suggestions.push({
+            name: "Signature Everyday Look",
+            itemIds: items,
+            occasion: "Casual",
+            stylistNotes: "A clean, effortless daily combination created from your closet basics.",
+          });
+        }
       }
 
-      // Second fallback look
-      if (catalog.length >= 2) {
-        const item1 = catalog[0];
-        const item2 = catalog[1];
-        if (!suggestions.some((s) => s.itemIds.includes(item1.id) && s.itemIds.includes(item2.id))) {
+      // Additional fallback with dress/full body or second top-bottom set
+      if (dresses.length > 0 && !suggestions.some((s) => s.itemIds.includes(dresses[0].id))) {
+        const items = [dresses[0].id];
+        if (shoes[0]) items.push(shoes[0].id);
+        suggestions.push({
+          name: `${dresses[0].subcategory || "Full Body"} Ensemble`,
+          itemIds: items,
+          occasion: "Casual",
+          stylistNotes: "An elegant full-body look.",
+        });
+      } else if (tops.length > 1 && bottoms.length > 1) {
+        const items = [tops[1].id, bottoms[1].id];
+        if (isValidOutfit(items) && !suggestions.some((s) => s.itemIds.includes(tops[1].id))) {
           suggestions.push({
-            name: "Modern Chic Pair",
-            itemIds: [item1.id, item2.id],
+            name: "Weekend Casual Look",
+            itemIds: items,
             occasion: "Casual",
-            stylistNotes: "A minimalist two-piece pairing.",
+            stylistNotes: "A relaxed weekend pairing.",
           });
         }
       }
@@ -419,25 +463,21 @@ export default function OutfitBuilder({
           {/* AI Suggestion Area */}
           {(isAiLoading || aiSuggestions.length > 0 || aiError) && (
             <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 p-4 rounded-3xl border border-emerald-100 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-emerald-500 fill-emerald-500" />
-                  Gemini Stylist Suggestions
-                </span>
-                {aiSuggestions.length > 0 && (
+              {aiSuggestions.length > 0 && (
+                <div className="flex items-center justify-end">
                   <button
                     onClick={() => setAiSuggestions([])}
                     className="text-[10px] text-emerald-600 hover:underline font-bold"
                   >
                     Clear
                   </button>
-                )}
-              </div>
+                </div>
+              )}
 
               {isAiLoading && (
                 <div className="flex items-center gap-2.5 py-4 text-xs text-emerald-700 animate-pulse font-medium">
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  Stylist is matching colors and seasons to propose perfect coordinates...
+                  Generating suggestions...
                 </div>
               )}
 
@@ -453,23 +493,15 @@ export default function OutfitBuilder({
                   {aiSuggestions.map((s, idx) => (
                     <div
                       key={idx}
-                      className="bg-white p-3 rounded-2xl border border-emerald-100/50 hover:shadow-sm transition space-y-1.5"
+                      className="bg-white p-3 rounded-2xl border border-emerald-100/50 hover:shadow-sm transition flex items-center justify-between gap-3"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-gray-900">{s.name}</span>
-                        <button
-                          onClick={() => handleApplyAiOutfit(s)}
-                          className="px-2.5 py-1 bg-black text-white hover:bg-zinc-800 text-[10px] font-bold rounded-full transition"
-                        >
-                          Load Look
-                        </button>
-                      </div>
-                      <p className="text-[11px] text-gray-500 leading-relaxed italic">
-                        "{s.stylistNotes}"
-                      </p>
-                      <span className="inline-block text-[9px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-                        {s.occasion}
-                      </span>
+                      <span className="text-xs font-bold text-gray-900">{s.name}</span>
+                      <button
+                        onClick={() => handleApplyAiOutfit(s)}
+                        className="px-3 py-1 bg-black text-white hover:bg-zinc-800 text-[10px] font-bold rounded-full transition shrink-0"
+                      >
+                        View
+                      </button>
                     </div>
                   ))}
                 </div>
