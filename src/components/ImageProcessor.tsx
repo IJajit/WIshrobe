@@ -295,7 +295,7 @@ export default function ImageProcessor({
     }
   };
 
-  // Load cutoutUrl onto local interactive editing canvas whenever cutoutUrl changes
+  // Load cutoutUrl onto local interactive editing canvas whenever cutoutUrl or isErasing mode changes
   useEffect(() => {
     if (!cutoutUrl) return;
     const canvas = canvasRef.current;
@@ -306,13 +306,15 @@ export default function ImageProcessor({
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
+      if (img.width > 0 && img.height > 0) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+      }
     };
     img.src = cutoutUrl;
-  }, [cutoutUrl]);
+  }, [cutoutUrl, isErasing]);
 
   // Push current canvas state onto history stack
   const saveStateToHistory = () => {
