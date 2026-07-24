@@ -209,6 +209,75 @@ export default function OutfitBuilder({
     // If starting item is on canvas, pass its ID to build around
     const seedItemId = selectedItems.length > 0 ? selectedItems[0].id : undefined;
 
+    // If AI server call fails or API key is not configured, generate smart outfit pairing locally
+    const fallbackLocalSuggestions = (): SuggestedOutfit[] => {
+      if (catalog.length < 2) return [];
+      const tops = catalog.filter((i) => i.category === "Tops");
+      const bottoms = catalog.filter((i) => i.category === "Bottoms" || i.category === "Skirts");
+      const shoes = catalog.filter((i) => i.category === "Shoes");
+      const outerwear = catalog.filter((i) => i.category === "Outerwear");
+
+      const seedItem = selectedItems.length > 0 ? selectedItems[0] : null;
+      const suggestions: SuggestedOutfit[] = [];
+
+      if (seedItem) {
+        if (seedItem.category === "Tops") {
+          const partnerBottom = bottoms[0] || catalog.find((i) => i.id !== seedItem.id);
+          if (partnerBottom) {
+            const items = [seedItem.id, partnerBottom.id];
+            if (shoes[0]) items.push(shoes[0].id);
+            suggestions.push({
+              name: `Casual ${seedItem.subcategory || "Top"} Look`,
+              itemIds: items,
+              occasion: "Casual",
+              stylistNotes: `Paired your ${seedItem.subcategory || "top"} with ${partnerBottom.subcategory || "bottoms"} for a balanced everyday outfit.`,
+            });
+          }
+        } else if (seedItem.category === "Bottoms" || seedItem.category === "Skirts") {
+          const partnerTop = tops[0] || catalog.find((i) => i.id !== seedItem.id);
+          if (partnerTop) {
+            const items = [partnerTop.id, seedItem.id];
+            if (shoes[0]) items.push(shoes[0].id);
+            suggestions.push({
+              name: `Classic ${seedItem.subcategory || "Bottom"} Ensemble`,
+              itemIds: items,
+              occasion: "Casual",
+              stylistNotes: `Styled your ${seedItem.subcategory || "bottom"} with ${partnerTop.subcategory || "top"}.`,
+            });
+          }
+        }
+      }
+
+      // Default fallback outfit if seed item pairing wasn't enough
+      if (suggestions.length === 0 && tops.length > 0 && bottoms.length > 0) {
+        const items = [tops[0].id, bottoms[0].id];
+        if (outerwear[0]) items.push(outerwear[0].id);
+        else if (shoes[0]) items.push(shoes[0].id);
+        suggestions.push({
+          name: "Signature Everyday Look",
+          itemIds: items,
+          occasion: "Casual",
+          stylistNotes: "A clean, effortless daily combination created from your closet basics.",
+        });
+      }
+
+      // Second fallback look
+      if (catalog.length >= 2) {
+        const item1 = catalog[0];
+        const item2 = catalog[1];
+        if (!suggestions.some((s) => s.itemIds.includes(item1.id) && s.itemIds.includes(item2.id))) {
+          suggestions.push({
+            name: "Modern Chic Pair",
+            itemIds: [item1.id, item2.id],
+            occasion: "Casual",
+            stylistNotes: "A minimalist two-piece pairing.",
+          });
+        }
+      }
+
+      return suggestions;
+    };
+
     try {
       const response = await fetch("/api/suggest-outfits", {
         method: "POST",
@@ -227,11 +296,21 @@ export default function OutfitBuilder({
       if (Array.isArray(data.outfits) && data.outfits.length > 0) {
         setAiSuggestions(data.outfits);
       } else {
-        setAiError("Gemini couldn't find a perfect pairing right now. Try adding more colors or categories to your closet!");
+        const localFallback = fallbackLocalSuggestions();
+        if (localFallback.length > 0) {
+          setAiSuggestions(localFallback);
+        } else {
+          setAiError("Gemini couldn't find a perfect pairing right now. Try adding more items to your closet!");
+        }
       }
     } catch (err: any) {
-      console.error("AI coordinate error:", err);
-      setAiError("Failed to coordinate AI suggestions. Please check your network.");
+      console.warn("AI coordinate API fallback to local smart styling:", err);
+      const localFallback = fallbackLocalSuggestions();
+      if (localFallback.length > 0) {
+        setAiSuggestions(localFallback);
+      } else {
+        setAiError("Failed to coordinate AI suggestions. Please check your network.");
+      }
     } finally {
       setIsAiLoading(false);
     }
@@ -253,43 +332,55 @@ export default function OutfitBuilder({
 
   const handleSaveOutfit = async () => {
     if (selectedItems.length === 0) return;
-    if (!outfitName.trim()) {
-      setSaveError("Please enter a name for your outfit.");
-      return;
-    }
+    
+    // Auto-generate name if left blank
+    const nameToSave = outfitName.trim() || `${occasionTag} Look ${new Date().toLocaleDateString()}`;
 
     setIsSaving(true);
     setSaveError(null);
 
     try {
       const outfitId = initialOutfit ? initialOutfit.id : `outfit-${Date.now()}`;
-      const outfitData = {
+      const outfitData: Outfit = {
         id: outfitId,
         profileId: profile.id,
-        name: outfitName.trim(),
+        name: nameToSave,
         itemIds: selectedItems.map((item) => item.id),
         itemScales,
         occasion: occasionTag,
         createdAt: initialOutfit ? initialOutfit.createdAt : new Date().toISOString(),
       };
 
-      const res = await fetch(initialOutfit ? `/api/outfits/${initialOutfit.id}` : "/api/outfits", {
+      // 1. Save to localStorage immediately (instant response)
+      const storageKey = `local_outfits_${profile.id}`;
+      const localRaw = localStorage.getItem(storageKey);
+      const existingOutfits: Outfit[] = localRaw ? JSON.parse(localRaw) : [];
+
+      let updatedOutfits: Outfit[];
+      if (initialOutfit) {
+        updatedOutfits = existingOutfits.map((o) => (o.id === outfitId ? outfitData : o));
+      } else {
+        updatedOutfits = [outfitData, ...existingOutfits];
+      }
+      localStorage.setItem(storageKey, JSON.stringify(updatedOutfits));
+
+      onOutfitSaved();
+      onClose();
+      setIsSaving(false);
+
+      // 2. Sync to server in background
+      fetch(initialOutfit ? `/api/outfits/${initialOutfit.id}` : "/api/outfits", {
         method: initialOutfit ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
           "X-User-Uid": userId,
         },
         body: JSON.stringify(outfitData),
-      });
+      }).catch(() => {});
 
-      if (!res.ok) throw new Error(await res.text());
-
-      onOutfitSaved();
-      onClose();
     } catch (err: any) {
       console.error("Save outfit error:", err);
       setSaveError("Failed to save outfit. Please try again.");
-    } finally {
       setIsSaving(false);
     }
   };
