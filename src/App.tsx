@@ -455,6 +455,21 @@ export default function App() {
       <AuthScreen
         onSuccess={(uid) => {
           const userObj = { uid };
+          // If switching to a new user, reset local cached profile ID so the app loads the new account's profiles from server
+          const prevUser = localStorage.getItem("supabase_user");
+          if (prevUser) {
+            try {
+              const parsed = JSON.parse(prevUser);
+              if (parsed.uid !== uid) {
+                // Clear active profile reference for previous user
+                Object.keys(localStorage).forEach((key) => {
+                  if (key.startsWith("wishrobe_active_profile_")) {
+                    localStorage.removeItem(key);
+                  }
+                });
+              }
+            } catch {}
+          }
           localStorage.setItem("supabase_user", JSON.stringify(userObj));
           setUser(userObj);
         }}
