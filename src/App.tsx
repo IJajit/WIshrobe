@@ -365,14 +365,11 @@ export default function App() {
         } catch {}
       }
 
-      // Sync to server in background
+      // Delete from Supabase directly
       try {
-        await fetch(`/api/items/${itemId}`, {
-          method: "DELETE",
-          headers: { "X-User-Uid": user.uid },
-        });
+        await supabase.from("items").delete().eq("id", itemId);
       } catch {
-        // Server unavailable — localStorage delete is sufficient
+        // Supabase unavailable — localStorage delete applied
       }
     } catch (err) {
       console.error("Error deleting item:", err);
