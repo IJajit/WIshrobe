@@ -84,14 +84,14 @@ export default function ProfileSwitcher({
         // 2. Load from localStorage if server returned empty or offline
         let localList = loadLocalProfiles();
 
-        // 3. Seed defaults ONLY if guest user and no local profiles exist
+        // 3. Seed deterministic profiles for new accounts so profile IDs match across devices
         if (localList.length === 0) {
-          const default1: Profile = { id: `p-${Date.now()}-1`, name: "Sarah", avatarColor: "bg-purple-500", createdAt: new Date().toISOString() };
-          const default2: Profile = { id: `p-${Date.now()}-2`, name: "Alex", avatarColor: "bg-teal-500", createdAt: new Date().toISOString() };
+          const default1: Profile = { id: `p-${userId}-sarah`, name: "Sarah", avatarColor: "bg-purple-500", createdAt: new Date().toISOString() };
+          const default2: Profile = { id: `p-${userId}-alex`, name: "Alex", avatarColor: "bg-teal-500", createdAt: new Date().toISOString() };
           localList = [default1, default2];
           saveLocalProfiles(localList);
 
-          // Post defaults to server so future logins on other devices pull these profiles
+          // Post defaults to server so future logins on other devices pull these exact profiles
           fetch("/api/profiles", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-User-Uid": userId },
