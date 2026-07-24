@@ -1,8 +1,8 @@
 name: Build Mobile Apps (Android APK & iOS)
 
 on:
-  push:
-    branches: [ main, master ]
+  # push:
+  #   branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
