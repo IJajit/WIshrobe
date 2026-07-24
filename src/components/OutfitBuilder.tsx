@@ -78,13 +78,15 @@ export default function OutfitBuilder({
         });
         if (res.ok) {
           const list: ClothingItem[] = await res.json();
-          // Merge local and server items
           const combined = [...localList];
           for (const item of list) {
             if (!combined.some((c) => c.id === item.id)) {
               combined.push(item);
             }
           }
+          setCatalog(combined);
+        }
+
         // Handle initial outfit editing or starting item pre-selection
         if (initialOutfit) {
           setOutfitName(initialOutfit.name);
