@@ -503,13 +503,28 @@ export default function ImageProcessor({
 
         {/* Canvas container: Scale zoom strictly when editing, centered normal view otherwise */}
         <div
-          className="w-full h-full flex items-center justify-center p-3 transition-transform duration-150 ease-out"
+          className="w-full h-full flex items-center justify-center p-3 transition-transform duration-150 ease-out relative"
           style={{
             transform: isErasing
               ? `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`
               : "none",
           }}
         >
+          {/* Always display preview <img> as underlying visual source */}
+          {cutoutUrl && (
+            <img
+              src={cutoutUrl}
+              alt="Item cutout"
+              className={`max-w-full max-h-full object-contain pointer-events-none transition-all duration-300 ${
+                isErasing ? "opacity-0 absolute" : "opacity-100 relative"
+              } ${
+                enableStudioFilter
+                  ? "contrast-[1.08] saturate-[1.06] brightness-[1.02] drop-shadow-[0_12px_24px_rgba(0,0,0,0.14)]"
+                  : "drop-shadow-md"
+              }`}
+            />
+          )}
+
           <canvas
             ref={canvasRef}
             onMouseDown={(e) => {
@@ -541,6 +556,8 @@ export default function ImageProcessor({
               else stopErasing();
             }}
             className={`max-w-full max-h-full object-contain z-10 transition-all duration-300 ${
+              isErasing ? "block" : "hidden"
+            } ${
               isErasing && activeTool === "pan"
                 ? isPanning ? "cursor-grabbing" : "cursor-grab"
                 : isErasing
