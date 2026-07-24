@@ -105,183 +105,152 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      if (activeTab === "items") {
-        const storageKey = `wishrobe_items_${activeProfile.id}`;
+      // 1. Fetch Items
+      const storageKey = `wishrobe_items_${activeProfile.id}`;
+      const latestLocalRaw = localStorage.getItem(storageKey);
+      const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
+      const localById = new Map(latestLocal.map((i) => [i.id, i]));
 
-        // Load localStorage cache first (has image data)
-        const latestLocalRaw = localStorage.getItem(storageKey);
-        const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
-        const localById = new Map(latestLocal.map((i) => [i.id, i]));
+      try {
+        const { data: dbItems, error } = await supabase
+          .from("items")
+          .select("id, user_id, profile_id, category, subcategory, colors, season, occasion, created_at, custom_zoom, custom_offset_y")
+          .eq("profile_id", activeProfile.id)
+          .order("created_at", { ascending: false });
 
-        // 1. Query Supabase for metadata only (skip image_url — it's huge base64)
-        try {
-          const { data: dbItems, error } = await supabase
-            .from("items")
-            .select("id, user_id, profile_id, category, subcategory, colors, season, occasion, created_at, custom_zoom, custom_offset_y")
-            .eq("profile_id", activeProfile.id)
-            .order("created_at", { ascending: false });
+        if (!error && dbItems) {
+          const dbMapped: ClothingItem[] = dbItems.map((item: any) => {
+            const cached = localById.get(item.id);
+            return {
+              id: item.id,
+              userId: item.user_id,
+              profileId: item.profile_id,
+              imageUrl: cached?.imageUrl || "",
+              category: item.category,
+              subcategory: item.subcategory,
+              colors: item.colors || [],
+              season: item.season || [],
+              occasion: item.occasion || [],
+              createdAt: item.created_at,
+              customZoom: item.custom_zoom ?? 1.0,
+              customOffsetY: item.custom_offset_y ?? 0,
+            };
+          });
 
-          if (!error && dbItems) {
-            // Map DB rows, using localStorage for image_url (avoids re-fetching huge images)
-            const dbMapped: ClothingItem[] = dbItems.map((item: any) => {
-              const cached = localById.get(item.id);
-              return {
-                id: item.id,
-                userId: item.user_id,
-                profileId: item.profile_id,
-                imageUrl: cached?.imageUrl || "",   // from localStorage or empty
-                category: item.category,
-                subcategory: item.subcategory,
-                colors: item.colors || [],
-                season: item.season || [],
-                occasion: item.occasion || [],
-                createdAt: item.created_at,
-                customZoom: item.custom_zoom ?? 1.0,
-                customOffsetY: item.custom_offset_y ?? 0,
-              };
-            });
+          const serverIds = new Set(dbMapped.map((i) => i.id));
+          const localOnly = latestLocal.filter((i) => !serverIds.has(i.id));
+          const finalItems = [...dbMapped, ...localOnly];
 
-            // Add any local-only items not yet in Supabase
-            const serverIds = new Set(dbMapped.map((i) => i.id));
-            const localOnly = latestLocal.filter((i) => !serverIds.has(i.id));
-            const finalItems = [...dbMapped, ...localOnly];
+          localStorage.setItem(storageKey, JSON.stringify(finalItems));
+          const mergedRestored = finalItems.map((item) => {
+            const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
+            const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
+            return {
+              ...item,
+              customZoom: savedZoom !== null ? parseFloat(savedZoom) : (item.customZoom || 1.0),
+              customOffsetY: savedOffsetY !== null ? parseInt(savedOffsetY) : (item.customOffsetY || 0),
+            };
+          });
+          setItems(mergedRestored);
 
-            localStorage.setItem(storageKey, JSON.stringify(finalItems));
-            const mergedRestored = finalItems.map((item) => {
-              const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
-              const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
-              return {
-                ...item,
-                customZoom: savedZoom !== null ? parseFloat(savedZoom) : (item.customZoom || 1.0),
-                customOffsetY: savedOffsetY !== null ? parseInt(savedOffsetY) : (item.customOffsetY || 0),
-              };
-            });
-            setItems(mergedRestored);
-            setIsLoading(false);
+          // Background image fetch
+          const missingImages = dbMapped.filter((i) => !i.imageUrl);
+          if (missingImages.length > 0) {
+            const recompress = (dataUrl: string): Promise<string> =>
+              new Promise((resolve) => {
+                const img = new window.Image();
+                img.onload = () => {
+                  const MAX = 350;
+                  const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                  const w = Math.round(img.width * scale);
+                  const h = Math.round(img.height * scale);
+                  const c = document.createElement("canvas");
+                  c.width = w; c.height = h;
+                  const ctx = c.getContext("2d")!;
+                  ctx.drawImage(img, 0, 0, w, h);
+                  const webp = c.toDataURL("image/webp", 0.75);
+                  if (webp.startsWith("data:image/webp")) { resolve(webp); return; }
+                  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+                  resolve(c.toDataURL("image/jpeg", 0.8));
+                };
+                img.onerror = () => resolve(dataUrl);
+                img.src = dataUrl;
+              });
 
-            // Sequentially fetch + compress images for items added from other devices
-            const missingImages = dbMapped.filter((i) => !i.imageUrl);
-            if (missingImages.length > 0) {
-              // Helper: compress a dataUrl to WebP <300KB
-              const recompress = (dataUrl: string): Promise<string> =>
-                new Promise((resolve) => {
-                  const img = new window.Image();
-                  img.onload = () => {
-                    const MAX = 350;
-                    const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-                    const w = Math.round(img.width * scale);
-                    const h = Math.round(img.height * scale);
-                    const c = document.createElement("canvas");
-                    c.width = w; c.height = h;
-                    const ctx = c.getContext("2d")!;
-                    ctx.drawImage(img, 0, 0, w, h);
-                    const webp = c.toDataURL("image/webp", 0.75);
-                    if (webp.startsWith("data:image/webp")) { resolve(webp); return; }
-                    // Fallback: JPEG on white bg
-                    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
-                    resolve(c.toDataURL("image/jpeg", 0.8));
-                  };
-                  img.onerror = () => resolve(dataUrl);
-                  img.src = dataUrl;
-                });
-
-              // Sequential fetch to respect Supabase 6MB row limit
-              (async () => {
-                for (const item of missingImages) {
-                  try {
-                    const { data } = await supabase
-                      .from("items")
-                      .select("id, image_url")
-                      .eq("id", item.id)
-                      .single();
-                    if (!data?.image_url) continue;
-
-                    // Compress to small size
-                    const compressed = await recompress(data.image_url);
-
-                    // Re-save compressed version to Supabase so future cross-device loads are fast
-                    if (compressed !== data.image_url) {
-                      supabase.from("items").update({ image_url: compressed }).eq("id", item.id).then(() => {});
-                    }
-
-                    // Update state and localStorage immediately as each image loads
-                    setItems((prev) => {
-                      const updated = prev.map((p) =>
-                        p.id === item.id ? { ...p, imageUrl: compressed } : p
-                      );
-                      localStorage.setItem(storageKey, JSON.stringify(updated));
-                      return updated;
-                    });
-                  } catch {
-                    // Skip this item if fetch fails
+            (async () => {
+              for (const item of missingImages) {
+                try {
+                  const { data } = await supabase
+                    .from("items")
+                    .select("id, image_url")
+                    .eq("id", item.id)
+                    .single();
+                  if (!data?.image_url) continue;
+                  const compressed = await recompress(data.image_url);
+                  if (compressed !== data.image_url) {
+                    supabase.from("items").update({ image_url: compressed }).eq("id", item.id).then(() => {});
                   }
-                }
-              })();
-            }
-
-            return;
+                  setItems((prev) => {
+                    const updated = prev.map((p) =>
+                      p.id === item.id ? { ...p, imageUrl: compressed } : p
+                    );
+                    localStorage.setItem(storageKey, JSON.stringify(updated));
+                    return updated;
+                  });
+                } catch {}
+              }
+            })();
           }
-        } catch (e) {
-          console.warn("Supabase items fetch failed, falling back to local:", e);
         }
-
+      } catch (e) {
+        console.warn("Supabase items fetch failed, falling back to local:", e);
         const localRaw = localStorage.getItem(storageKey);
         const localList: ClothingItem[] = localRaw ? JSON.parse(localRaw) : [];
-        const restored = localList.map((item) => {
-          const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
-          const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
-          return {
-            ...item,
-            customZoom: savedZoom !== null ? parseFloat(savedZoom) : (item.customZoom || 1.0),
-            customOffsetY: savedOffsetY !== null ? parseInt(savedOffsetY) : (item.customOffsetY || 0),
-          };
-        });
-        setItems(restored);
-        setIsLoading(false);
-      } else {
-        // Outfits — query Supabase directly for cross-device sync
-        try {
-          const { data: dbOutfits, error } = await supabase
-            .from("outfits")
-            .select("*")
-            .eq("profile_id", activeProfile.id)
-            .order("created_at", { ascending: false });
+        setItems(localList);
+      }
 
-          if (!error && dbOutfits) {
-            const mappedOutfits: Outfit[] = dbOutfits.map((o: any) => ({
-              id: o.id,
-              userId: o.user_id,
-              profileId: o.profile_id,
-              name: o.name,
-              itemIds: o.item_ids || [],
-              itemScales: o.item_scales || {},
-              occasion: o.occasion,
-              createdAt: o.created_at,
-              timesWorn: o.times_worn || 0,
-              lastWornAt: o.last_worn_at,
-            }));
+      // 2. Fetch Outfits (Always run)
+      try {
+        const { data: dbOutfits, error } = await supabase
+          .from("outfits")
+          .select("*")
+          .eq("profile_id", activeProfile.id)
+          .order("created_at", { ascending: false });
 
-            const storedOutfitsRaw = localStorage.getItem(`local_outfits_${activeProfile.id}`);
-            const localOutfits: Outfit[] = storedOutfitsRaw ? JSON.parse(storedOutfitsRaw) : [];
-            const serverIds = new Set(mappedOutfits.map((o) => o.id));
-            const localOnly = localOutfits.filter((o) => !serverIds.has(o.id));
-            const mergedOutfits = [...mappedOutfits, ...localOnly];
+        if (!error && dbOutfits) {
+          const mappedOutfits: Outfit[] = dbOutfits.map((o: any) => ({
+            id: o.id,
+            userId: o.user_id,
+            profileId: o.profile_id,
+            name: o.name,
+            itemIds: o.item_ids || [],
+            itemScales: o.item_scales || {},
+            occasion: o.occasion,
+            createdAt: o.created_at,
+            timesWorn: o.times_worn || 0,
+            lastWornAt: o.last_worn_at,
+          }));
 
-            setOutfits(mergedOutfits);
-            localStorage.setItem(`local_outfits_${activeProfile.id}`, JSON.stringify(mergedOutfits));
-            setIsLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.warn("Supabase outfits fetch error:", e);
+          const storedOutfitsRaw = localStorage.getItem(`local_outfits_${activeProfile.id}`);
+          const localOutfits: Outfit[] = storedOutfitsRaw ? JSON.parse(storedOutfitsRaw) : [];
+          const serverIds = new Set(mappedOutfits.map((o) => o.id));
+          const localOnly = localOutfits.filter((o) => !serverIds.has(o.id));
+          const mergedOutfits = [...mappedOutfits, ...localOnly];
+
+          setOutfits(mergedOutfits);
+          localStorage.setItem(`local_outfits_${activeProfile.id}`, JSON.stringify(mergedOutfits));
+        } else {
+          const storedOutfits = localStorage.getItem(`local_outfits_${activeProfile.id}`);
+          if (storedOutfits) setOutfits(JSON.parse(storedOutfits));
         }
-
+      } catch (e) {
+        console.warn("Supabase outfits fetch error:", e);
         const storedOutfits = localStorage.getItem(`local_outfits_${activeProfile.id}`);
         if (storedOutfits) setOutfits(JSON.parse(storedOutfits));
-        setIsLoading(false);
       }
     } catch (err) {
       console.error("Error loading wardrobe data:", err);
+    } finally {
       setIsLoading(false);
     }
   };

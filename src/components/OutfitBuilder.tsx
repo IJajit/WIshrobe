@@ -396,7 +396,26 @@ export default function OutfitBuilder({
         createdAt: initialOutfit ? initialOutfit.createdAt : new Date().toISOString(),
       };
 
-      // 1. Save to localStorage immediately (instant response)
+      // 1. Sync to Supabase directly first to guarantee cross-device persistence
+      try {
+        const { error: dbError } = await supabase.from("outfits").upsert({
+          id: outfitData.id,
+          user_id: userId,
+          profile_id: profile.id,
+          name: outfitData.name,
+          item_ids: outfitData.itemIds,
+          occasion: outfitData.occasion,
+          created_at: outfitData.createdAt,
+          item_scales: outfitData.itemScales,
+        });
+        if (dbError) {
+          console.error("Supabase outfit save error:", dbError);
+        }
+      } catch (e) {
+        console.warn("Supabase outfit sync warning:", e);
+      }
+
+      // 2. Save to localStorage
       const storageKey = `local_outfits_${profile.id}`;
       const localRaw = localStorage.getItem(storageKey);
       const existingOutfits: Outfit[] = localRaw ? JSON.parse(localRaw) : [];
@@ -412,22 +431,6 @@ export default function OutfitBuilder({
       onOutfitSaved();
       onClose();
       setIsSaving(false);
-
-      // 2. Sync to Supabase directly
-      try {
-        await supabase.from("outfits").upsert({
-          id: outfitData.id,
-          user_id: userId,
-          profile_id: profile.id,
-          name: outfitData.name,
-          item_ids: outfitData.itemIds,
-          occasion: outfitData.occasion,
-          created_at: outfitData.createdAt,
-          item_scales: outfitData.itemScales,
-        });
-      } catch (e) {
-        console.warn("Supabase outfit sync warning:", e);
-      }
 
     } catch (err: any) {
       console.error("Save outfit error:", err);
