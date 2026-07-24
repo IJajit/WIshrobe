@@ -25,8 +25,8 @@ app.use((req, _res, next) => {
 let supabaseClient: any = null;
 function getSupabaseClient() {
   if (!supabaseClient) {
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+    const url = process.env.SUPABASE_URL || "https://eftkphzrlvbblqdqhhuv.supabase.co";
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmdGtwaHpybHZiYmxxZHFoaHV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3OTY5MDAsImV4cCI6MjEwMDM3MjkwMH0.lQDuQ8GUqSovUvLMegLKHWyyLyL-7efAgqIbmtGAQiY";
     if (url && key) {
       supabaseClient = createClient(url, key);
     }
