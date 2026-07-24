@@ -371,6 +371,7 @@ export default function ImageProcessor({
   // Pan dragging state when zoomed in
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState<boolean>(false);
+  const [activeTool, setActiveTool] = useState<"brush" | "pan">("brush");
   const startPanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Toggle Eraser Mode - Reset zoom and pan back to default when closing eraser mode
@@ -386,20 +387,22 @@ export default function ImageProcessor({
 
   // Pan event handlers for dragging zoomed image on desktop or phone
   const handlePanStart = (e: React.MouseEvent | React.TouchEvent) => {
-    if (zoomLevel <= 1) return;
-    // Right click or spacebar or 2-finger touch can trigger pan, or middle mouse drag
-    if ("button" in e && e.button === 1) {
+    if (!isErasing || zoomLevel <= 1) return;
+    const isTouch = "touches" in e;
+    // Allow panning if Pan tool is active, or if touch with 2 fingers, or middle click
+    if (activeTool === "pan" || ("button" in e && e.button === 1) || (isTouch && e.touches.length > 1)) {
       setIsPanning(true);
-      const clientX = e.clientX;
-      const clientY = e.clientY;
+      const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+      const clientY = isTouch ? e.touches[0].clientY : e.clientY;
       startPanRef.current = { x: clientX - panOffset.x, y: clientY - panOffset.y };
     }
   };
 
   const handlePanMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isPanning || zoomLevel <= 1) return;
-    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    const isTouch = "touches" in e;
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
     setPanOffset({
       x: clientX - startPanRef.current.x,
       y: clientY - startPanRef.current.y,
@@ -429,7 +432,7 @@ export default function ImageProcessor({
   };
 
   const startErasing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isErasing) return;
+    if (!isErasing || activeTool === "pan") return;
     saveStateToHistory(); // Save 1 step snapshot BEFORE starting the brush stroke
     setIsDrawing(true);
     eraseAt(e);
@@ -499,15 +502,40 @@ export default function ImageProcessor({
         >
           <canvas
             ref={canvasRef}
-            onMouseDown={startErasing}
-            onMouseMove={drawErase}
-            onMouseUp={stopErasing}
-            onMouseLeave={stopErasing}
-            onTouchStart={startErasing}
-            onTouchMove={drawErase}
-            onTouchEnd={stopErasing}
+            onMouseDown={(e) => {
+              if (activeTool === "pan") handlePanStart(e);
+              else startErasing(e);
+            }}
+            onMouseMove={(e) => {
+              if (isPanning) handlePanMove(e);
+              else drawErase(e);
+            }}
+            onMouseUp={(e) => {
+              if (isPanning) handlePanEnd();
+              else stopErasing();
+            }}
+            onMouseLeave={(e) => {
+              if (isPanning) handlePanEnd();
+              else stopErasing();
+            }}
+            onTouchStart={(e) => {
+              if (activeTool === "pan" || e.touches.length > 1) handlePanStart(e);
+              else startErasing(e);
+            }}
+            onTouchMove={(e) => {
+              if (isPanning) handlePanMove(e);
+              else drawErase(e);
+            }}
+            onTouchEnd={() => {
+              if (isPanning) handlePanEnd();
+              else stopErasing();
+            }}
             className={`max-w-full max-h-full object-contain z-10 transition-all duration-300 ${
-              isErasing ? "cursor-crosshair" : ""
+              isErasing && activeTool === "pan"
+                ? isPanning ? "cursor-grabbing" : "cursor-grab"
+                : isErasing
+                ? "cursor-crosshair"
+                : ""
             } ${
               enableStudioFilter
                 ? "contrast-[1.08] saturate-[1.06] brightness-[1.02] drop-shadow-[0_12px_24px_rgba(0,0,0,0.14)]"
@@ -576,16 +604,45 @@ export default function ImageProcessor({
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               {zoomLevel > 1 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setZoomLevel(1);
-                    setPanOffset({ x: 0, y: 0 });
-                  }}
-                  className="text-[9px] font-medium text-gray-600 bg-slate-200 px-2 py-1 rounded-lg ml-1 hover:bg-slate-300 transition"
-                >
-                  Reset
-                </button>
+                <div className="flex items-center gap-1 ml-1 border-l border-slate-200 pl-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTool("brush")}
+                    className={`p-1 rounded-lg border text-[10px] font-semibold flex items-center gap-1 transition ${
+                      activeTool === "brush"
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                        : "bg-white text-gray-700 border-slate-200 hover:bg-slate-100"
+                    }`}
+                    title="Brush Tool (Erase)"
+                  >
+                    <Eraser className="w-3.5 h-3.5" />
+                    <span>Erase</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTool("pan")}
+                    className={`p-1 rounded-lg border text-[10px] font-semibold flex items-center gap-1 transition ${
+                      activeTool === "pan"
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                        : "bg-white text-gray-700 border-slate-200 hover:bg-slate-100"
+                    }`}
+                    title="Pan Tool (Move Zoomed Image)"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    <span>Pan</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoomLevel(1);
+                      setPanOffset({ x: 0, y: 0 });
+                      setActiveTool("brush");
+                    }}
+                    className="text-[9px] font-medium text-gray-600 bg-slate-200 px-2 py-1 rounded-lg ml-0.5 hover:bg-slate-300 transition"
+                  >
+                    Reset
+                  </button>
+                </div>
               )}
             </div>
 
