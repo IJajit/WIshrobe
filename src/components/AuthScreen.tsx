@@ -30,11 +30,13 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
   const handleSandboxBypass = () => {
     setError(null);
     const cleanEmail = email.toLowerCase().trim();
+
+    // If no credentials provided (e.g. called from Firebase error screen), use guest session
     if (!cleanEmail || !password) {
-      setError("Please fill in both email and password before using Sandbox Mode.");
-      setAuthDisabledError(false);
+      onSuccess("guest-sandbox-user");
       return;
     }
+
     const storedPassword = localStorage.getItem(`auth_pwd_${cleanEmail}`);
     
     if (isSignUp) {
@@ -47,8 +49,9 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
       onSuccess(`local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`);
     } else {
       if (!storedPassword) {
-        setError("No local account found for this email. Switch to 'Create Account' to register.");
-        setAuthDisabledError(false);
+        // Auto-create the local account so first-time users don't get stuck
+        localStorage.setItem(`auth_pwd_${cleanEmail}`, password);
+        onSuccess(`local-user-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`);
         return;
       }
       if (storedPassword !== password) {
@@ -181,66 +184,52 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
               Wishrobe
               <Sparkle className="w-4 h-4 text-[#1A1A1A] fill-[#1A1A1A]" />
             </h1>
-            <p className="text-xs text-[#7F7F8E] font-bold uppercase tracking-wider mt-1.5">
-              Clean Shared Household Closet
+            <p className="text-xs text-[#7F7F8E] font-medium capitalize tracking-wider mt-1.5">
+              Personal Closet
             </p>
           </div>
         </div>
 
         {/* Info Card */}
-        <div className="w-full max-w-md mx-auto bg-white rounded-[32px] p-8 shadow-md border border-[#E5E7EB] space-y-6">
+        <div className="w-full max-w-md mx-auto bg-white rounded-[32px] p-8 shadow-md border border-[#E5E7EB] space-y-5">
           <div className="space-y-2 text-center">
-            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-100">
-              <AlertTriangle className="w-6 h-6 animate-pulse" />
-            </div>
-            <h2 className="text-lg font-bold text-gray-900 mt-2">
-              Email Sign-In is Disabled
+            <h2 className="text-xl font-bold text-gray-900">
+              Welcome to Wishrobe
             </h2>
-            <p className="text-xs text-gray-500 leading-relaxed">
-              Your Firebase project has not enabled the <strong>Email/Password</strong> sign-in method in the Firebase console.
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Your personal wardrobe, beautifully organized.
             </p>
           </div>
 
-          <div className="bg-slate-50 border border-slate-150 rounded-2xl p-4 text-xs space-y-3 text-gray-700">
-            <p className="font-bold text-slate-800 uppercase tracking-wide text-[10px]">How to Enable Email/Password Sign-In:</p>
-            <ol className="list-decimal list-inside space-y-2.5 leading-relaxed text-gray-600">
-              <li>
-                Go to the <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-emerald-600 underline font-semibold hover:text-emerald-700">Firebase Console</a>.
-              </li>
-              <li>
-                Open your project and navigate to <strong className="text-slate-900">Build &gt; Authentication</strong>.
-              </li>
-              <li>
-                Click on the <strong className="text-slate-900">Sign-in method</strong> tab.
-              </li>
-              <li>
-                Click <strong className="text-slate-900">Add new provider</strong>, choose <strong className="text-slate-900">Email/Password</strong>, enable it, and save.
-              </li>
+          <button
+            type="button"
+            onClick={handleSandboxBypass}
+            className="w-full py-4 bg-black text-white hover:bg-zinc-800 font-bold rounded-2xl text-sm shadow-md transition flex items-center justify-center gap-2"
+          >
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            Enter App
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAuthDisabledError(false)}
+            className="w-full py-3 bg-slate-50 text-gray-600 hover:bg-slate-100 border border-slate-200 font-medium rounded-xl text-xs transition flex items-center justify-center gap-1"
+          >
+            Sign In with Email Instead
+          </button>
+
+          <details className="text-xs text-gray-400 leading-relaxed">
+            <summary className="cursor-pointer font-semibold text-gray-500 hover:text-gray-700 transition">Firebase setup required for email sign-in ▾</summary>
+            <ol className="list-decimal list-inside space-y-1.5 mt-2 text-gray-500">
+              <li>Go to the <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" className="text-emerald-600 underline font-semibold">Firebase Console</a>.</li>
+              <li>Navigate to <strong className="text-gray-700">Build &gt; Authentication &gt; Sign-in method</strong>.</li>
+              <li>Enable <strong className="text-gray-700">Email/Password</strong> and save.</li>
             </ol>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setAuthDisabledError(false)}
-              className="w-full py-3.5 bg-black text-white hover:bg-zinc-800 font-bold rounded-xl text-xs shadow-md transition flex items-center justify-center gap-1"
-            >
-              I've Enabled It, Try Again
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSandboxBypass}
-              className="w-full py-3.5 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-100 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5"
-            >
-              <Sparkles className="w-4 h-4 text-emerald-500" />
-              Proceed in Local Sandbox Mode
-            </button>
-          </div>
+          </details>
         </div>
 
         <div className="text-center text-[11px] text-gray-400 mt-8 max-w-xs mx-auto">
-          You can use Sandbox Mode to design and test instantly. Your wardrobe will be saved locally in this browser.
+          Your wardrobe is saved locally in your browser.
         </div>
       </div>
     );
