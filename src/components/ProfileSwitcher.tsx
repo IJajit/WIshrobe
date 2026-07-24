@@ -61,10 +61,10 @@ export default function ProfileSwitcher({
     const loadProfiles = async () => {
       setIsLoading(true);
       try {
-        // 1. Load from localStorage first (always works, even on Vercel)
+        // 1. Load from localStorage first — always the source of truth
         let localList = loadLocalProfiles();
 
-        // 2. Seed defaults if nothing is stored yet
+        // 2. Seed defaults if nothing stored yet
         if (localList.length === 0) {
           const default1: Profile = { id: `p-${Date.now()}-1`, name: "Sarah", avatarColor: "bg-purple-500", createdAt: new Date().toISOString() };
           const default2: Profile = { id: `p-${Date.now()}-2`, name: "Alex", avatarColor: "bg-teal-500", createdAt: new Date().toISOString() };
@@ -79,22 +79,29 @@ export default function ProfileSwitcher({
         const matched = localList.find((p) => p.id === savedId);
         saveActiveProfile(matched || localList[0]);
 
-        // 3. Try to sync with server in background (optional, won't block UI)
+        // 3. Optional background server sync — local ALWAYS wins
+        //    Server can only add profiles not already in local storage.
+        //    It can NEVER remove or overwrite local profiles.
         try {
           const res = await fetch("/api/profiles", { headers: { "X-User-Uid": userId } });
           if (res.ok) {
             const serverList: Profile[] = await res.json();
             if (serverList.length > 0) {
-              // Merge: keep local additions, update with server data
-              const merged = serverList;
-              setProfiles(merged);
-              saveLocalProfiles(merged);
-              const serverMatched = merged.find((p) => p.id === savedId);
-              if (serverMatched) saveActiveProfile(serverMatched);
+              // Re-read local at this point (user may have changed it while fetch was in flight)
+              const latestLocal = loadLocalProfiles();
+              const localIds = new Set(latestLocal.map((p) => p.id));
+              // Only ADD server profiles that don't exist locally — never replace
+              const serverOnly = serverList.filter((p) => !localIds.has(p.id));
+              if (serverOnly.length > 0) {
+                const merged = [...latestLocal, ...serverOnly];
+                setProfiles(merged);
+                saveLocalProfiles(merged);
+              }
+              // If server has fewer profiles than local, ignore server — local is newer
             }
           }
         } catch {
-          // Server unavailable (Vercel static deploy) — local data is fine
+          // Server unavailable — local data is the truth, no action needed
         }
       } catch (err) {
         console.error("Error loading profiles:", err);

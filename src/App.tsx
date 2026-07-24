@@ -432,7 +432,7 @@ export default function App() {
               onProfileChange={(p) => {
                 setActiveProfile(p);
                 if (user?.uid && p?.id) {
-                  localStorage.setItem(`active_profile_${user.uid}`, p.id);
+                  localStorage.setItem(`wishrobe_active_profile_${user.uid}`, p.id);
                 }
               }}
             />
