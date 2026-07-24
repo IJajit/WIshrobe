@@ -220,16 +220,20 @@ export default function AddItemFlow({
       existing.push(itemData);
       localStorage.setItem(storageKey, JSON.stringify(existing));
 
+      // Sync to server database first to guarantee persistence across devices
+      try {
+        await fetch("/api/items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-User-Uid": userId },
+          body: JSON.stringify(itemData),
+        });
+      } catch (e) {
+        console.warn("Server sync warning:", e);
+      }
+
       onItemAdded();
       onClose();
       setIsSaving(false);
-
-      // Sync to server in background — non-blocking
-      fetch("/api/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-User-Uid": userId },
-        body: JSON.stringify(itemData),
-      }).catch(() => {});
 
     } catch (err: any) {
       console.error("Save item error:", err);
