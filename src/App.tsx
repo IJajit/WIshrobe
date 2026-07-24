@@ -122,16 +122,14 @@ export default function App() {
 
     try {
       if (activeTab === "items") {
-        const res = await fetch(`/api/items?profileId=${activeProfile.id}`, {
-          headers: {
-            "X-User-Uid": user.uid,
-          },
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const list: ClothingItem[] = await res.json();
-        
-        // Merge persistent localStorage zoom and vertical offset overrides
-        const restoredList = list.map((item) => {
+        const storageKey = `wishrobe_items_${activeProfile.id}`;
+
+        // 1. Load from localStorage immediately — always works
+        const localRaw = localStorage.getItem(storageKey);
+        const localList: ClothingItem[] = localRaw ? JSON.parse(localRaw) : [];
+
+        // Restore zoom/offset overrides
+        const restored = localList.map((item) => {
           const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
           const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
           return {
@@ -140,27 +138,59 @@ export default function App() {
             customOffsetY: savedOffsetY !== null ? parseInt(savedOffsetY) : (item.customOffsetY || 0),
           };
         });
+        setItems(restored);
 
-        setItems(restoredList);
-      } else {
-        const res = await fetch(`/api/outfits?profileId=${activeProfile.id}`, {
-          headers: {
-            "X-User-Uid": user.uid,
-          },
-        });
-        if (res.ok) {
-          const list: Outfit[] = await res.json();
-          setOutfits(list);
-          localStorage.setItem(`local_outfits_${activeProfile.id}`, JSON.stringify(list));
-        } else {
-          const stored = localStorage.getItem(`local_outfits_${activeProfile.id}`);
-          if (stored) {
-            setOutfits(JSON.parse(stored));
+        // 2. Try server in background — merge additively, never overwrite local
+        try {
+          const res = await fetch(`/api/items?profileId=${activeProfile.id}`, {
+            headers: { "X-User-Uid": user.uid },
+          });
+          if (res.ok) {
+            const serverList: ClothingItem[] = await res.json();
+            // Re-read local (might have changed while fetch was in flight)
+            const latestLocalRaw = localStorage.getItem(storageKey);
+            const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
+            const localIds = new Set(latestLocal.map((i) => i.id));
+            // Only add server items not already in local
+            const serverOnly = serverList.filter((i) => !localIds.has(i.id));
+            if (serverOnly.length > 0) {
+              const merged = [...latestLocal, ...serverOnly];
+              localStorage.setItem(storageKey, JSON.stringify(merged));
+              const mergedRestored = merged.map((item) => {
+                const savedZoom = localStorage.getItem(`item_zoom_${item.id}`);
+                const savedOffsetY = localStorage.getItem(`item_offset_y_${item.id}`);
+                return {
+                  ...item,
+                  customZoom: savedZoom !== null ? parseFloat(savedZoom) : (item.customZoom || 1.0),
+                  customOffsetY: savedOffsetY !== null ? parseInt(savedOffsetY) : (item.customOffsetY || 0),
+                };
+              });
+              setItems(mergedRestored);
+            }
           }
+        } catch {
+          // Server unavailable — local items are shown, nothing to do
+        }
+      } else {
+        // Outfits — load from localStorage first, then try server
+        const storedOutfits = localStorage.getItem(`local_outfits_${activeProfile.id}`);
+        if (storedOutfits) setOutfits(JSON.parse(storedOutfits));
+
+        try {
+          const res = await fetch(`/api/outfits?profileId=${activeProfile.id}`, {
+            headers: { "X-User-Uid": user.uid },
+          });
+          if (res.ok) {
+            const list: Outfit[] = await res.json();
+            setOutfits(list);
+            localStorage.setItem(`local_outfits_${activeProfile.id}`, JSON.stringify(list));
+          }
+        } catch {
+          // Server unavailable — local outfits are shown
         }
       }
     } catch (err) {
-      console.error("Error loading SQL Wardrobe data:", err);
+      console.error("Error loading wardrobe data:", err);
     } finally {
       setIsLoading(false);
     }
@@ -195,14 +225,27 @@ export default function App() {
       setItems((prev) => prev.map((i) => (i.id === item.id ? updatedItem : i)));
       setSelectedItemDetail(updatedItem);
 
-      await fetch(`/api/items/${item.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Uid": user.uid,
-        },
-        body: JSON.stringify(updates),
-      });
+      // Persist update to localStorage
+      try {
+        const storageKey = `wishrobe_items_${item.profileId}`;
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          const list: ClothingItem[] = JSON.parse(raw);
+          const updated = list.map((i) => (i.id === item.id ? updatedItem : i));
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+        }
+      } catch {}
+
+      // Sync to server in background
+      try {
+        await fetch(`/api/items/${item.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "X-User-Uid": user.uid },
+          body: JSON.stringify(updates),
+        });
+      } catch {
+        // Server unavailable — localStorage update is sufficient
+      }
     } catch (err) {
       console.error("Error updating item:", err);
     }
@@ -236,15 +279,31 @@ export default function App() {
   // Delete item from closet
   const handleDeleteItem = async (itemId: string) => {
     try {
+      const itemToDelete = items.find((i) => i.id === itemId);
       setItems((prev) => prev.filter((i) => i.id !== itemId));
       setSelectedItemDetail(null);
 
-      await fetch(`/api/items/${itemId}`, {
-        method: "DELETE",
-        headers: {
-          "X-User-Uid": user.uid,
-        },
-      });
+      // Persist delete to localStorage
+      if (itemToDelete) {
+        try {
+          const storageKey = `wishrobe_items_${itemToDelete.profileId}`;
+          const raw = localStorage.getItem(storageKey);
+          if (raw) {
+            const list: ClothingItem[] = JSON.parse(raw);
+            localStorage.setItem(storageKey, JSON.stringify(list.filter((i) => i.id !== itemId)));
+          }
+        } catch {}
+      }
+
+      // Sync to server in background
+      try {
+        await fetch(`/api/items/${itemId}`, {
+          method: "DELETE",
+          headers: { "X-User-Uid": user.uid },
+        });
+      } catch {
+        // Server unavailable — localStorage delete is sufficient
+      }
     } catch (err) {
       console.error("Error deleting item:", err);
     }
