@@ -200,8 +200,28 @@ app.get("/api/profiles", async (req, res) => {
       });
     }
 
-    const { data: list, error } = await client.from("profiles").select().eq("user_id", userId);
+    let { data: list, error } = await client.from("profiles").select().eq("user_id", userId);
     if (error) throw error;
+
+    // If new account has 0 profiles in DB, seed default profiles into Supabase automatically
+    if (!list || list.length === 0) {
+      const default1 = {
+        id: `p-${userId}-sarah`,
+        user_id: userId,
+        name: "Sarah",
+        avatar_color: "bg-purple-500",
+        created_at: new Date().toISOString()
+      };
+      const default2 = {
+        id: `p-${userId}-alex`,
+        user_id: userId,
+        name: "Alex",
+        avatar_color: "bg-teal-500",
+        created_at: new Date().toISOString()
+      };
+      await client.from("profiles").upsert([default1, default2]);
+      list = [default1, default2];
+    }
     
     // Map db snake_case columns to camelCase expected by client
     const formatted = (list || []).map((p: any) => ({
