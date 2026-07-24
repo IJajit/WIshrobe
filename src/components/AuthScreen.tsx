@@ -53,7 +53,6 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
     setError(null);
     setLoading(true);
     const cleanEmail = email.toLowerCase().trim();
-    const fallbackUid = cleanEmail.replace(/[^a-zA-Z0-9]/g, "-");
 
     try {
       if (isSignUp) {
@@ -70,7 +69,13 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
         }
       }
 
-      // If Supabase Auth is disabled or fails, fallback to local pwd check & fallbackUid
+      // Hardcoded fallback mapping for account ishanjajit@gmail.com
+      if (cleanEmail === "ishanjajit@gmail.com") {
+        onSuccess({ uid: "1fcb1270-a0fe-45bf-b9ab-313592095627", email: cleanEmail });
+        return;
+      }
+
+      const fallbackUid = cleanEmail.replace(/[^a-zA-Z0-9]/g, "-");
       const storedPassword = localStorage.getItem(`auth_pwd_${cleanEmail}`);
       if (storedPassword && storedPassword !== password) {
         setError("Invalid email or password.");
@@ -80,7 +85,11 @@ export default function AuthScreen({ onSuccess }: AuthScreenProps) {
       localStorage.setItem(`auth_pwd_${cleanEmail}`, password);
       onSuccess({ uid: fallbackUid, email: cleanEmail });
     } catch (err: any) {
-      onSuccess({ uid: fallbackUid, email: cleanEmail });
+      if (cleanEmail === "ishanjajit@gmail.com") {
+        onSuccess({ uid: "1fcb1270-a0fe-45bf-b9ab-313592095627", email: cleanEmail });
+        return;
+      }
+      onSuccess({ uid: cleanEmail.replace(/[^a-zA-Z0-9]/g, "-"), email: cleanEmail });
     } finally {
       setLoading(false);
     }
