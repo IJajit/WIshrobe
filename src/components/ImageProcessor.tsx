@@ -216,15 +216,7 @@ export default function ImageProcessor({
               }
             }
 
-            // Composite onto white background and output as fast JPEG
-            const finalCanvas = document.createElement("canvas");
-            finalCanvas.width = canvas.width;
-            finalCanvas.height = canvas.height;
-            const finalCtx = finalCanvas.getContext("2d")!;
-            finalCtx.fillStyle = "white";
-            finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-            finalCtx.drawImage(canvas, 0, 0);
-            let cleanBase64 = finalCanvas.toDataURL("image/jpeg", 0.9);
+            let cleanBase64 = canvas.toDataURL("image/png");
 
             // If visible clothing pixels found, crop canvas tightly around bounding box with small 4% margin
             if (hasVisible && maxX > minX && maxY > minY) {
@@ -237,14 +229,12 @@ export default function ImageProcessor({
 
               const croppedCtx = croppedCanvas.getContext("2d");
               if (croppedCtx) {
-                croppedCtx.fillStyle = "white";
-                croppedCtx.fillRect(0, 0, croppedCanvas.width, croppedCanvas.height);
                 croppedCtx.drawImage(
-                  finalCanvas,
+                  canvas,
                   minX, minY, cropW, cropH,
                   pad, pad, cropW, cropH
                 );
-                cleanBase64 = croppedCanvas.toDataURL("image/jpeg", 0.9);
+                cleanBase64 = croppedCanvas.toDataURL("image/png");
               }
             }
 
@@ -258,14 +248,7 @@ export default function ImageProcessor({
             setIsProcessing(false);
           } catch (cleanErr) {
             console.warn("Component filtering fallback:", cleanErr);
-            const whiteCanvas = document.createElement("canvas");
-            whiteCanvas.width = canvas.width;
-            whiteCanvas.height = canvas.height;
-            const whiteCtx = whiteCanvas.getContext("2d")!;
-            whiteCtx.fillStyle = "white";
-            whiteCtx.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
-            whiteCtx.drawImage(canvas, 0, 0);
-            const rawBase64 = whiteCanvas.toDataURL("image/jpeg", 0.9);
+            const rawBase64 = canvas.toDataURL("image/png");
             if (!isSubscribed) return;
             cachedCutoutRef.current = rawBase64;
             isCutoutGeneratedRef.current = true;
