@@ -108,35 +108,40 @@ export default function App() {
       if (activeTab === "items") {
         const storageKey = `wishrobe_items_${activeProfile.id}`;
 
-        // 1. Query Supabase directly - bypasses Vercel routing issues
+        // Load localStorage cache first (has image data)
+        const latestLocalRaw = localStorage.getItem(storageKey);
+        const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
+        const localById = new Map(latestLocal.map((i) => [i.id, i]));
+
+        // 1. Query Supabase for metadata only (skip image_url — it's huge base64)
         try {
           const { data: dbItems, error } = await supabase
             .from("items")
-            .select("*")
+            .select("id, user_id, profile_id, category, subcategory, colors, season, occasion, created_at, custom_zoom, custom_offset_y")
             .eq("profile_id", activeProfile.id)
             .order("created_at", { ascending: false });
 
           if (!error && dbItems) {
-            // Map snake_case db fields to camelCase ClothingItem
-            const dbMapped: ClothingItem[] = dbItems.map((item: any) => ({
-              id: item.id,
-              userId: item.user_id,
-              profileId: item.profile_id,
-              imageUrl: item.image_url,
-              category: item.category,
-              subcategory: item.subcategory,
-              colors: item.colors || [],
-              season: item.season || [],
-              occasion: item.occasion || [],
-              createdAt: item.created_at,
-              customZoom: item.custom_zoom ?? 1.0,
-              customOffsetY: item.custom_offset_y ?? 0,
-            }));
+            // Map DB rows, using localStorage for image_url (avoids re-fetching huge images)
+            const dbMapped: ClothingItem[] = dbItems.map((item: any) => {
+              const cached = localById.get(item.id);
+              return {
+                id: item.id,
+                userId: item.user_id,
+                profileId: item.profile_id,
+                imageUrl: cached?.imageUrl || "",   // from localStorage or empty
+                category: item.category,
+                subcategory: item.subcategory,
+                colors: item.colors || [],
+                season: item.season || [],
+                occasion: item.occasion || [],
+                createdAt: item.created_at,
+                customZoom: item.custom_zoom ?? 1.0,
+                customOffsetY: item.custom_offset_y ?? 0,
+              };
+            });
 
-            const latestLocalRaw = localStorage.getItem(storageKey);
-            const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
-
-            // Merge: server is source of truth; add any local-only items on top
+            // Add any local-only items not yet in Supabase
             const serverIds = new Set(dbMapped.map((i) => i.id));
             const localOnly = latestLocal.filter((i) => !serverIds.has(i.id));
             const finalItems = [...dbMapped, ...localOnly];
@@ -153,6 +158,34 @@ export default function App() {
             });
             setItems(mergedRestored);
             setIsLoading(false);
+
+            // Fetch image_url in background for items missing it (added from another device)
+            const missingImages = dbMapped.filter((i) => !i.imageUrl);
+            if (missingImages.length > 0) {
+              Promise.all(
+                missingImages.map((item) =>
+                  supabase
+                    .from("items")
+                    .select("id, image_url")
+                    .eq("id", item.id)
+                    .single()
+                )
+              ).then((results) => {
+                setItems((prev) => {
+                  const updated = prev.map((item) => {
+                    if (!item.imageUrl) {
+                      const match = results.find((r) => r.data?.id === item.id);
+                      if (match?.data?.image_url) return { ...item, imageUrl: match.data.image_url };
+                    }
+                    return item;
+                  });
+                  // Save updated images to localStorage
+                  localStorage.setItem(storageKey, JSON.stringify(updated));
+                  return updated;
+                });
+              }).catch(() => {});
+            }
+
             return;
           }
         } catch (e) {
