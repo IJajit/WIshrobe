@@ -233,7 +233,7 @@ export default function ProfileSwitcher({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute top-12 left-0 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 z-[100] space-y-1 animate-in fade-in slide-in-from-top-3 duration-200">
+        <div className="absolute top-12 right-0 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 z-[100] space-y-1 animate-in fade-in slide-in-from-top-3 duration-200">
           <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
               Profiles
