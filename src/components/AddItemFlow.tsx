@@ -325,7 +325,7 @@ export default function AddItemFlow({
                 className="w-full py-3.5 bg-slate-100 border border-slate-200 text-gray-700 hover:bg-slate-200 font-medium rounded-2xl text-xs transition flex items-center justify-center gap-2"
               >
                 <ImageIcon className="w-4 h-4 text-gray-500" />
-                Re-upload
+                Upload
               </button>
 
               <input
@@ -356,7 +356,7 @@ export default function AddItemFlow({
                 }}
                 className="flex-1 py-3 bg-slate-100 border border-slate-200 text-slate-700 font-medium rounded-2xl text-xs transition"
               >
-                Re-upload
+                Upload
               </button>
               <button
                 type="button"
