@@ -172,54 +172,85 @@ export default function AddItemFlow({
     }
   };
 
+  // Compress image to max 600px JPEG at 75% quality — keeps localStorage under quota
+  const compressImage = (dataUrl: string, maxPx = 600, quality = 0.75): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(dataUrl); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  };
+
   const handleSave = async () => {
     if (!processedImage) return;
     setIsSaving(true);
     setSaveError(null);
 
-    const itemData = {
-      id: `item-${Date.now()}`,
-      profileId: profile.id,
-      imageUrl: processedImage,
-      category,
-      subcategory: subcategory.trim() || `${category} Item`,
-      colors,
-      season,
-      occasion: occasions,
-      createdAt: new Date().toISOString(),
-      customZoom: 1.0,
-      customOffsetY: 0,
-    };
-
-    // 1. Save to localStorage immediately — always works, even on Vercel
     try {
+      // Compress image so it fits in localStorage (full photos can be 2-5MB)
+      const compressedImage = await compressImage(processedImage);
+
+      // Try Firebase Storage upload first for a permanent URL
+      let imageUrl = compressedImage;
+      try {
+        const storageRef = ref(storage, `items/${userId}/${profile.id}/item-${Date.now()}.jpg`);
+        await uploadString(storageRef, compressedImage, "data_url");
+        imageUrl = await getDownloadURL(storageRef);
+      } catch {
+        // Firebase Storage unavailable — use compressed base64 directly
+      }
+
+      const itemData = {
+        id: `item-${Date.now()}`,
+        profileId: profile.id,
+        imageUrl,
+        category,
+        subcategory: subcategory.trim() || `${category} Item`,
+        colors,
+        season,
+        occasion: occasions,
+        createdAt: new Date().toISOString(),
+        customZoom: 1.0,
+        customOffsetY: 0,
+      };
+
+      // Save to localStorage immediately — always works
       const storageKey = `wishrobe_items_${profile.id}`;
       const existing = JSON.parse(localStorage.getItem(storageKey) || "[]");
       existing.push(itemData);
       localStorage.setItem(storageKey, JSON.stringify(existing));
-    } catch (e) {
-      console.warn("localStorage save failed:", e);
-    }
 
-    // 2. Notify parent to refresh the items list, close modal
-    onItemAdded();
-    onClose();
-    setIsSaving(false);
+      // Notify parent and close
+      onItemAdded();
+      onClose();
 
-    // 3. Sync to server in background — optional, non-blocking
-    try {
-      await fetch("/api/items", {
+      // Sync to server in background — non-blocking
+      fetch("/api/items", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-Uid": userId,
-        },
+        headers: { "Content-Type": "application/json", "X-User-Uid": userId },
         body: JSON.stringify(itemData),
-      });
-    } catch {
-      // Server unavailable — localStorage save is sufficient
+      }).catch(() => {});
+
+    } catch (err: any) {
+      console.error("Save item error:", err);
+      setSaveError("Failed to save item. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
+
 
   const toggleSeason = (s: string) => {
     setSeason((prev) =>
