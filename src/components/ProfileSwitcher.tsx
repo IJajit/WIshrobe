@@ -67,35 +67,31 @@ export default function ProfileSwitcher({
           if (res.ok) {
             const serverList: Profile[] = await res.json();
             if (serverList.length > 0) {
-              const latestLocal = loadLocalProfiles();
-              const localIds = new Set(latestLocal.map((p) => p.id));
-              const serverOnly = serverList.filter((p) => !localIds.has(p.id));
-              const merged = [...latestLocal, ...serverOnly];
-              setProfiles(merged);
-              saveLocalProfiles(merged);
+              setProfiles(serverList);
+              saveLocalProfiles(serverList);
 
               const savedId = localStorage.getItem(ACTIVE_KEY);
-              const matched = merged.find((p) => p.id === savedId);
-              saveActiveProfile(matched || merged[0]);
+              const matched = serverList.find((p) => p.id === savedId);
+              saveActiveProfile(matched || serverList[0]);
               setIsLoading(false);
               return;
             }
           }
         } catch {
-          // Server offline or network error fallback
+          // Server offline fallback
         }
 
-        // 2. Load from localStorage if server returned empty or failed
+        // 2. Load from localStorage if server returned empty or offline
         let localList = loadLocalProfiles();
 
-        // 3. Seed defaults only if no server profile & no local profile exists
+        // 3. Seed defaults ONLY if guest user and no local profiles exist
         if (localList.length === 0) {
           const default1: Profile = { id: `p-${Date.now()}-1`, name: "Sarah", avatarColor: "bg-purple-500", createdAt: new Date().toISOString() };
           const default2: Profile = { id: `p-${Date.now()}-2`, name: "Alex", avatarColor: "bg-teal-500", createdAt: new Date().toISOString() };
           localList = [default1, default2];
           saveLocalProfiles(localList);
 
-          // Post defaults to server for new users
+          // Post defaults to server so future logins on other devices pull these profiles
           fetch("/api/profiles", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-User-Uid": userId },
