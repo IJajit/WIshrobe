@@ -92,16 +92,18 @@ export default function ProfileSwitcher({
           saveLocalProfiles(localList);
 
           // Post defaults to server so future logins on other devices pull these exact profiles
-          fetch("/api/profiles", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-User-Uid": userId },
-            body: JSON.stringify(default1),
-          }).catch(() => {});
-          fetch("/api/profiles", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-User-Uid": userId },
-            body: JSON.stringify(default2),
-          }).catch(() => {});
+          try {
+            await fetch("/api/profiles", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-User-Uid": userId },
+              body: JSON.stringify(default1),
+            });
+            await fetch("/api/profiles", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-User-Uid": userId },
+              body: JSON.stringify(default2),
+            });
+          } catch {}
         }
 
         setProfiles(localList);
