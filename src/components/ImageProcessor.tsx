@@ -515,9 +515,7 @@ export default function ImageProcessor({
             <img
               src={cutoutUrl}
               alt="Item cutout"
-              className={`max-w-full max-h-full object-contain pointer-events-none transition-all duration-300 ${
-                isErasing ? "opacity-0 absolute" : "opacity-100 relative"
-              } ${
+              className={`max-w-full max-h-full object-contain pointer-events-none transition-opacity duration-150 ${
                 enableStudioFilter
                   ? "contrast-[1.08] saturate-[1.06] brightness-[1.02] drop-shadow-[0_12px_24px_rgba(0,0,0,0.14)]"
                   : "drop-shadow-md"
@@ -555,18 +553,14 @@ export default function ImageProcessor({
               if (isPanning) handlePanEnd();
               else stopErasing();
             }}
-            className={`max-w-full max-h-full object-contain z-10 transition-all duration-300 ${
-              isErasing ? "relative" : "absolute opacity-0 pointer-events-none"
+            className={`max-w-full max-h-full object-contain absolute inset-0 m-auto z-10 ${
+              isErasing ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
             } ${
               isErasing && activeTool === "pan"
                 ? isPanning ? "cursor-grabbing" : "cursor-grab"
                 : isErasing
                 ? "cursor-crosshair"
                 : ""
-            } ${
-              enableStudioFilter
-                ? "contrast-[1.08] saturate-[1.06] brightness-[1.02] drop-shadow-[0_12px_24px_rgba(0,0,0,0.14)]"
-                : "drop-shadow-md"
             }`}
           />
         </div>
