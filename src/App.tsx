@@ -108,25 +108,38 @@ export default function App() {
       if (activeTab === "items") {
         const storageKey = `wishrobe_items_${activeProfile.id}`;
 
-        // 1. Check server first to sync cross-device wardrobe items
+        // 1. Query Supabase directly - bypasses Vercel routing issues
         try {
-          const res = await fetch(`/api/items?profileId=${activeProfile.id}`, {
-            headers: { "X-User-Uid": user.uid },
-          });
-          if (res.ok) {
-            const serverList: ClothingItem[] = await res.json();
+          const { data: dbItems, error } = await supabase
+            .from("items")
+            .select("*")
+            .eq("profile_id", activeProfile.id)
+            .order("created_at", { ascending: false });
+
+          if (!error && dbItems) {
+            // Map snake_case db fields to camelCase ClothingItem
+            const dbMapped: ClothingItem[] = dbItems.map((item: any) => ({
+              id: item.id,
+              userId: item.user_id,
+              profileId: item.profile_id,
+              imageUrl: item.image_url,
+              category: item.category,
+              subcategory: item.subcategory,
+              colors: item.colors || [],
+              season: item.season || [],
+              occasion: item.occasion || [],
+              createdAt: item.created_at,
+              customZoom: item.custom_zoom ?? 1.0,
+              customOffsetY: item.custom_offset_y ?? 0,
+            }));
+
             const latestLocalRaw = localStorage.getItem(storageKey);
             const latestLocal: ClothingItem[] = latestLocalRaw ? JSON.parse(latestLocalRaw) : [];
 
-            // If server returns items, use server items directly so incognito tabs immediately show updated DB items
-            let finalItems = serverList;
-            if (serverList.length === 0 && latestLocal.length > 0) {
-              finalItems = latestLocal;
-            } else if (serverList.length > 0 && latestLocal.length > 0) {
-              const serverIds = new Set(serverList.map((i) => i.id));
-              const localOnly = latestLocal.filter((i) => !serverIds.has(i.id));
-              finalItems = [...serverList, ...localOnly];
-            }
+            // Merge: server is source of truth; add any local-only items on top
+            const serverIds = new Set(dbMapped.map((i) => i.id));
+            const localOnly = latestLocal.filter((i) => !serverIds.has(i.id));
+            const finalItems = [...dbMapped, ...localOnly];
 
             localStorage.setItem(storageKey, JSON.stringify(finalItems));
             const mergedRestored = finalItems.map((item) => {
@@ -142,8 +155,8 @@ export default function App() {
             setIsLoading(false);
             return;
           }
-        } catch {
-          // Server offline fallback
+        } catch (e) {
+          console.warn("Supabase items fetch failed, falling back to local:", e);
         }
 
         const localRaw = localStorage.getItem(storageKey);

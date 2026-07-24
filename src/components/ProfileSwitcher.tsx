@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import ReactDOM from "react-dom";
 import { Profile } from "../types";
 import { Users, Plus, Check, ChevronDown, UserPlus, X, Trash2, Edit2 } from "lucide-react";
+import { supabase } from "../supabase";
 
 interface ProfileSwitcherProps {
   userId: string;
@@ -61,49 +62,46 @@ export default function ProfileSwitcher({
     const loadProfiles = async () => {
       setIsLoading(true);
       try {
-        // 1. Try server sync first to sync profiles across devices for logged-in users
-        try {
-          const res = await fetch("/api/profiles", { headers: { "X-User-Uid": userId } });
-          if (res.ok) {
-            const serverList: Profile[] = await res.json();
-            if (serverList.length > 0) {
-              setProfiles(serverList);
-              saveLocalProfiles(serverList);
+        // 1. Query Supabase directly - bypasses Vercel routing issues
+        const { data: dbProfiles, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: true });
 
-              const savedId = localStorage.getItem(ACTIVE_KEY);
-              const matched = serverList.find((p) => p.id === savedId);
-              saveActiveProfile(matched || serverList[0]);
-              setIsLoading(false);
-              return;
-            }
-          }
-        } catch {
-          // Server offline fallback
+        if (!error && dbProfiles && dbProfiles.length > 0) {
+          const mapped: Profile[] = dbProfiles.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            avatarColor: p.avatar_color,
+            createdAt: p.created_at,
+          }));
+          setProfiles(mapped);
+          saveLocalProfiles(mapped);
+
+          const savedId = localStorage.getItem(ACTIVE_KEY);
+          const matched = mapped.find((p) => p.id === savedId);
+          saveActiveProfile(matched || mapped[0]);
+          setIsLoading(false);
+          return;
         }
 
-        // 2. Load from localStorage if server returned empty or offline
+        // 2. Load from localStorage if Supabase returned empty
         let localList = loadLocalProfiles();
 
-        // 3. Seed deterministic profiles for new accounts so profile IDs match across devices
+        // 3. Seed default profiles for brand new accounts
         if (localList.length === 0) {
-          const default1: Profile = { id: `p-${userId}-sarah`, name: "Sarah", avatarColor: "bg-purple-500", createdAt: new Date().toISOString() };
-          const default2: Profile = { id: `p-${userId}-alex`, name: "Alex", avatarColor: "bg-teal-500", createdAt: new Date().toISOString() };
+          const ts = Date.now();
+          const default1: Profile = { id: `p-${ts}-1`, name: "Wiwu", avatarColor: "bg-indigo-500", createdAt: new Date().toISOString() };
+          const default2: Profile = { id: `p-${ts}-2`, name: "Ishu", avatarColor: "bg-amber-500", createdAt: new Date().toISOString() };
           localList = [default1, default2];
           saveLocalProfiles(localList);
 
-          // Post defaults to server so future logins on other devices pull these exact profiles
-          try {
-            await fetch("/api/profiles", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-User-Uid": userId },
-              body: JSON.stringify(default1),
-            });
-            await fetch("/api/profiles", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-User-Uid": userId },
-              body: JSON.stringify(default2),
-            });
-          } catch {}
+          // Save to Supabase
+          await supabase.from("profiles").upsert([
+            { id: default1.id, user_id: userId, name: default1.name, avatar_color: default1.avatarColor, created_at: default1.createdAt },
+            { id: default2.id, user_id: userId, name: default2.name, avatar_color: default2.avatarColor, created_at: default2.createdAt },
+          ]);
         }
 
         setProfiles(localList);
@@ -142,15 +140,17 @@ export default function ProfileSwitcher({
     setShowAddModal(false);
     setIsOpen(false);
 
-    // Try to sync to server in background
+    // Sync to Supabase directly
     try {
-      await fetch("/api/profiles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-User-Uid": userId },
-        body: JSON.stringify(newProfile),
+      await supabase.from("profiles").upsert({
+        id: newProfile.id,
+        user_id: userId,
+        name: newProfile.name,
+        avatar_color: newProfile.avatarColor,
+        created_at: newProfile.createdAt,
       });
     } catch {
-      // Server unavailable — local save is sufficient
+      // Supabase unavailable — local save is sufficient
     }
   };
 
@@ -168,15 +168,14 @@ export default function ProfileSwitcher({
     if (activeProfile?.id === editingProfile.id) saveActiveProfile(updatedProfile);
     setEditingProfile(null);
 
-    // Try to sync to server in background
+    // Sync to Supabase directly
     try {
-      await fetch(`/api/profiles/${editingProfile.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "X-User-Uid": userId },
-        body: JSON.stringify({ name: editName.trim(), avatarColor: selectedColor }),
-      });
+      await supabase.from("profiles").update({
+        name: editName.trim(),
+        avatar_color: selectedColor,
+      }).eq("id", editingProfile.id);
     } catch {
-      // Server unavailable — local save is sufficient
+      // Supabase unavailable — local save is sufficient
     }
   };
 
@@ -197,14 +196,11 @@ export default function ProfileSwitcher({
     saveLocalProfiles(updated);
     if (activeProfile?.id === profileId) saveActiveProfile(updated[0]);
 
-    // Try to sync to server in background
+    // Sync to Supabase directly
     try {
-      await fetch(`/api/profiles/${profileId}`, {
-        method: "DELETE",
-        headers: { "X-User-Uid": userId },
-      });
+      await supabase.from("profiles").delete().eq("id", profileId);
     } catch {
-      // Server unavailable — local delete is sufficient
+      // Supabase unavailable — local delete is sufficient
     }
   };
 

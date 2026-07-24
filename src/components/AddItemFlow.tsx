@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { Camera, Image as ImageIcon, X, ArrowRight, ArrowLeft, Check, Sparkles, AlertCircle } from "lucide-react";
 import { Profile, ClothingItem } from "../types";
 import ImageProcessor from "./ImageProcessor";
+import { supabase } from "../supabase";
 
 interface AddItemFlowProps {
   userId: string;
@@ -220,15 +221,24 @@ export default function AddItemFlow({
       existing.push(itemData);
       localStorage.setItem(storageKey, JSON.stringify(existing));
 
-      // Sync to server database first to guarantee persistence across devices
+      // Sync to Supabase directly
       try {
-        await fetch("/api/items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-User-Uid": userId },
-          body: JSON.stringify(itemData),
+        await supabase.from("items").upsert({
+          id: itemData.id,
+          user_id: userId,
+          profile_id: profile.id,
+          image_url: itemData.imageUrl,
+          category: itemData.category,
+          subcategory: itemData.subcategory,
+          colors: itemData.colors,
+          season: itemData.season,
+          occasion: itemData.occasion,
+          created_at: itemData.createdAt,
+          custom_zoom: itemData.customZoom,
+          custom_offset_y: itemData.customOffsetY,
         });
       } catch (e) {
-        console.warn("Server sync warning:", e);
+        console.warn("Supabase sync warning:", e);
       }
 
       onItemAdded();
