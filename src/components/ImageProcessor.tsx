@@ -515,9 +515,7 @@ export default function ImageProcessor({
             <img
               src={cutoutUrl}
               alt="Item cutout"
-              className={`max-w-full max-h-full object-contain pointer-events-none transition-all duration-300 ${
-                isErasing ? "opacity-0 absolute" : "opacity-100 relative"
-              } ${
+              className={`max-w-full max-h-full object-contain pointer-events-none transition-all duration-300 absolute ${
                 enableStudioFilter
                   ? "contrast-[1.08] saturate-[1.06] brightness-[1.02] drop-shadow-[0_12px_24px_rgba(0,0,0,0.14)]"
                   : "drop-shadow-md"
