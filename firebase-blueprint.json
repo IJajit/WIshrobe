@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "A user profile in the household",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "name", "avatarColor", "createdAt"]
+    },
+    "ClothingItem": {
+      "title": "ClothingItem",
+      "description": "An item of clothing in the wardrobe",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "profileId": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "category": { "type": "string" },
+        "subcategory": { "type": "string" },
+        "colors": { "type": "array" },
+        "season": { "type": "array" },
+        "occasion": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "timesWorn": { "type": "integer" },
+        "lastWornAt": { "type": "string" }
+      },
+      "required": ["userId", "profileId", "imageUrl", "category", "subcategory", "createdAt", "timesWorn"]
+    },
+    "Outfit": {
+      "title": "Outfit",
+      "description": "A curated outfit combining multiple clothing items",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "profileId": { "type": "string" },
+        "name": { "type": "string" },
+        "itemIds": { "type": "array" },
+        "occasion": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "timesWorn": { "type": "integer" },
+        "lastWornAt": { "type": "string" }
+      },
+      "required": ["userId", "profileId", "name", "itemIds", "occasion", "createdAt", "timesWorn"]
+    }
+  },
+  "firestore": {
+    "profiles/{profileId}": {
+      "schema": "Profile",
+      "description": "Shared household user profiles"
+    },
+    "items/{itemId}": {
+      "schema": "ClothingItem",
+      "description": "Closet items"
+    },
+    "outfits/{outfitId}": {
+      "schema": "Outfit",
+      "description": "Combined outfits"
+    }
+  }
+}

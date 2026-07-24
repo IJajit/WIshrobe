@@ -1,0 +1,6 @@
+{
+  "name": "Wardrobe",
+  "description": "A premium personal wardrobe cataloging and outfit building application with Gemini-powered background removal and auto-tagging.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
