@@ -862,12 +862,11 @@ export default function App() {
 
         </div>
 
-        {/* Floating Pill Create Button (bottom right, mint/green fill) */}
-        {/* Changed to absolute so it remains pinned gracefully inside the device mock screen layout */}
-        <div className="absolute bottom-6 right-6 z-40">
+        {/* Floating Pill Create Button (fixed in bottom right corner) */}
+        <div className="fixed bottom-6 right-6 z-40">
           <button
             onClick={() => setShowCreateActionSheet(true)}
-            className="bg-[#D1FAE5] hover:bg-[#A7F3D0] text-[#065F46] border border-[#A7F3D0]/30 px-5 py-3 rounded-full flex items-center gap-1.5 shadow-lg active:scale-95 transition tracking-wide text-xs uppercase font-bold"
+            className="bg-[#D1FAE5] hover:bg-[#A7F3D0] text-[#065F46] border border-[#A7F3D0]/30 px-5 py-3 rounded-full flex items-center gap-1.5 shadow-xl active:scale-95 transition tracking-wide text-xs uppercase font-bold"
           >
             <span className="text-lg font-light leading-none">+</span>
             <span>Add</span>
