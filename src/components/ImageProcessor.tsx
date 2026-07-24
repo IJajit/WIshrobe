@@ -295,9 +295,8 @@ export default function ImageProcessor({
     }
   };
 
-  // Load cutoutUrl onto local interactive editing canvas whenever cutoutUrl or isErasing mode changes
-  useEffect(() => {
-    if (!cutoutUrl) return;
+  // Helper function to draw cutoutUrl onto canvas
+  const drawCutoutToCanvas = (src: string) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -313,8 +312,14 @@ export default function ImageProcessor({
         ctx.drawImage(img, 0, 0);
       }
     };
-    img.src = cutoutUrl;
-  }, [cutoutUrl, isErasing]);
+    img.src = src;
+  };
+
+  // Load cutoutUrl onto local interactive editing canvas whenever cutoutUrl changes
+  useEffect(() => {
+    if (!cutoutUrl) return;
+    drawCutoutToCanvas(cutoutUrl);
+  }, [cutoutUrl]);
 
   // Push current canvas state onto history stack
   const saveStateToHistory = () => {
@@ -376,7 +381,7 @@ export default function ImageProcessor({
   const [activeTool, setActiveTool] = useState<"brush" | "pan">("brush");
   const startPanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Toggle Eraser Mode - Reset zoom and pan back to default when closing eraser mode
+  // Toggle Eraser Mode - Redraw canvas when opening eraser mode
   const handleToggleEraser = () => {
     if (isErasing) {
       setIsErasing(false);
@@ -384,6 +389,9 @@ export default function ImageProcessor({
       setPanOffset({ x: 0, y: 0 });
     } else {
       setIsErasing(true);
+      if (cutoutUrl) {
+        setTimeout(() => drawCutoutToCanvas(cutoutUrl), 50);
+      }
     }
   };
 
