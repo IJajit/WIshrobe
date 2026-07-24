@@ -308,8 +308,16 @@ app.get("/api/items", async (req, res) => {
     }
 
     const client = getSupabaseClient();
-    const { data: list, error } = await client.from("items").select().eq("profile_id", profileId);
+    let { data: list, error } = await client.from("items").select().eq("profile_id", profileId);
     if (error) throw error;
+
+    // Fallback: If 0 items returned for this specific profile_id, fetch all items belonging to this user_id
+    if (!list || list.length === 0) {
+      const { data: userItems } = await client.from("items").select().eq("user_id", userId);
+      if (userItems && userItems.length > 0) {
+        list = userItems;
+      }
+    }
 
     const formatted = (list || []).map((item: any) => {
       const override = localItemOverrides.get(item.id) || {};
