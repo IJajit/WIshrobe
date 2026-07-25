@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Wand2, RefreshCw, AlertCircle, RotateCw, Eraser, Undo2, ZoomIn, ZoomOut, Maximize2, Crop, X, Check } from "lucide-react";
+import { Wand2, RefreshCw, AlertCircle, RotateCw, Eraser, Paintbrush, Undo2, ZoomIn, ZoomOut, Maximize2, Crop, X, Check } from "lucide-react";
 import { removeBackground } from "@imgly/background-removal";
 
 interface ImageProcessorProps {
@@ -381,7 +381,7 @@ export default function ImageProcessor({
   // Pan dragging state when zoomed in
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState<boolean>(false);
-  const [activeTool, setActiveTool] = useState<"brush" | "pan">("brush");
+  const [activeTool, setActiveTool] = useState<"eraser" | "brush" | "pan">("eraser");
   const startPanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Toggle Eraser Mode - Redraw canvas when opening eraser mode
@@ -479,10 +479,24 @@ export default function ImageProcessor({
 
     const { x, y } = getCanvasCoords(e);
     ctx.save();
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.arc(x, y, brushSize, 0, Math.PI * 2, false);
-    ctx.fill();
+    if (activeTool === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.arc(x, y, brushSize, 0, Math.PI * 2, false);
+      ctx.fill();
+    } else if (activeTool === "brush" && uncroppedOriginalRef.current) {
+      // Brush mode: Restore pixels from original image within circular radius
+      const origImg = new Image();
+      origImg.src = uncroppedOriginalRef.current;
+      if (origImg.complete) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, brushSize, 0, Math.PI * 2, false);
+        ctx.clip();
+        ctx.drawImage(origImg, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+    }
     ctx.restore();
   };
 
@@ -644,52 +658,65 @@ export default function ImageProcessor({
               </div>
             </div>
 
-            {/* Bottom row (when zoomed in): Erase, Pan, and Reset mode toggles */}
-            {zoomLevel > 1 && (
-              <div className="flex items-center justify-between bg-white p-1.5 rounded-xl border border-slate-200 animate-in fade-in duration-150">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-medium text-gray-400 px-1">Tool:</span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTool("brush")}
-                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 transition ${
-                      activeTool === "brush"
-                        ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                        : "bg-slate-50 text-gray-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                    title="Brush Tool (Erase)"
-                  >
-                    <Eraser className="w-3.5 h-3.5" />
-                    <span>Erase</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTool("pan")}
-                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1.5 transition ${
-                      activeTool === "pan"
-                        ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                        : "bg-slate-50 text-gray-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                    title="Pan Tool (Move Zoomed Image)"
-                  >
-                    <Maximize2 className="w-3.5 h-3.5" />
-                    <span>Pan</span>
-                  </button>
-                </div>
+            {/* Tool Selection Bar: Eraser, Brush (Restore), Pan & Reset */}
+            <div className="flex items-center justify-between bg-white p-1.5 rounded-xl border border-slate-200 animate-in fade-in duration-150">
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                <span className="text-[10px] font-medium text-gray-400 px-0.5">Tool:</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("eraser")}
+                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition shrink-0 ${
+                    activeTool === "eraser"
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                      : "bg-slate-50 text-gray-700 border-slate-200 hover:bg-slate-100"
+                  }`}
+                  title="Eraser Tool (Remove pixels)"
+                >
+                  <Eraser className="w-3.5 h-3.5" />
+                  <span>Eraser</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("brush")}
+                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition shrink-0 ${
+                    activeTool === "brush"
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                      : "bg-slate-50 text-gray-700 border-slate-200 hover:bg-slate-100"
+                  }`}
+                  title="Brush Tool (Restore original pixels)"
+                >
+                  <Paintbrush className="w-3.5 h-3.5" />
+                  <span>Brush</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTool("pan")}
+                  className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition shrink-0 ${
+                    activeTool === "pan"
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                      : "bg-slate-50 text-gray-700 border-slate-200 hover:bg-slate-100"
+                  }`}
+                  title="Pan Tool (Move Zoomed Image)"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>Pan</span>
+                </button>
+              </div>
 
+              {zoomLevel > 1 && (
                 <button
                   type="button"
                   onClick={() => {
                     setZoomLevel(1);
                     setPanOffset({ x: 0, y: 0 });
-                    setActiveTool("brush");
+                    setActiveTool("eraser");
                   }}
-                  className="text-[10px] font-medium text-gray-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg border border-slate-200 transition"
+                  className="text-[10px] font-medium text-gray-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg border border-slate-200 transition shrink-0 ml-1"
                 >
-                  Reset Zoom
+                  Reset
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       ) : (
